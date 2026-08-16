@@ -169,9 +169,7 @@ pub fn delete_folder(
     emb_index.remove_by_path_prefix(&prefix);
     let _ = emb_index.save();
 
-    let fallback = list_visible_folder_names(&stik_folder)?
-        .into_iter()
-        .next();
+    let fallback = list_visible_folder_names(&stik_folder)?.into_iter().next();
     sync_settings_after_folder_delete(&name, fallback.as_deref())?;
 
     Ok(true)
@@ -225,7 +223,10 @@ pub fn get_folder_stats() -> Result<Vec<FolderStats>, String> {
                 })
                 .unwrap_or(0);
 
-            FolderStats { name: e.name, note_count }
+            FolderStats {
+                name: e.name,
+                note_count,
+            }
         })
         .collect();
 
@@ -236,12 +237,12 @@ pub fn get_folder_stats() -> Result<Vec<FolderStats>, String> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use super::{
         is_visible_folder_name, reconcile_settings_after_folder_delete,
         reconcile_settings_after_folder_rename, validate_name,
     };
     use crate::commands::settings::{GitSharingSettings, ShortcutMapping, StikSettings};
+    use std::collections::HashMap;
 
     fn sample_settings() -> StikSettings {
         StikSettings {

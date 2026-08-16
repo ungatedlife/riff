@@ -499,30 +499,6 @@ export default function PostIt({
   // needed — it caused a race where a delayed blur during reopen would
   // clear content the user just typed.
 
-  // Listen for Apple Notes import events (capture mode only)
-  useEffect(() => {
-    if (isSticked) return;
-
-    const unlisten = listen<{
-      markdown: string;
-      title?: string;
-      folder_name?: string;
-    }>("apple-note-imported", (event) => {
-      const md = event.payload.markdown;
-      setContent(md);
-      onContentChange?.(md);
-      setTimeout(() => {
-        editorRef.current?.setContent(md);
-        editorRef.current?.focus();
-        editorRef.current?.moveToEnd?.();
-      }, 100);
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, [isSticked, onContentChange]);
-
   // Read live content from the editor — doc.toString() is the source of truth
   // (unaffected by Decoration.replace widgets). Falls back to contentRef if
   // the editor is unmounted.
@@ -1697,23 +1673,6 @@ export default function PostIt({
                         className="w-full px-3 py-2 text-left text-[11px] text-ink hover:bg-line/50 transition-colors"
                       >
                         {t("postit.copyImage")}
-                      </button>
-                      <div className="border-t border-line" />
-                      <button
-                        onClick={async () => {
-                          setIsCopyMenuOpen(false);
-                          try {
-                            await invoke("show_apple_notes_picker_cmd");
-                          } catch (err) {
-                            console.error(
-                              "Failed to open Apple Notes picker:",
-                              err,
-                            );
-                          }
-                        }}
-                        className="w-full px-3 py-2 text-left text-[11px] text-ink hover:bg-line/50 transition-colors"
-                      >
-                        {t("postit.importAppleNotes")}
                       </button>
                     </div>
                   )}

@@ -150,9 +150,12 @@ pub fn start_analytics(app: &AppHandle) {
     let _ = ANALYTICS_ENABLED.set(enabled);
 
     if !enabled {
-        eprintln!("[analytics] disabled (key={}, setting={})",
+        eprintln!(
+            "[analytics] disabled (key={}, setting={})",
             POSTHOG_API_KEY.is_some(),
-            super::settings::load_settings_from_file().map(|s| s.analytics_enabled).unwrap_or(false),
+            super::settings::load_settings_from_file()
+                .map(|s| s.analytics_enabled)
+                .unwrap_or(false),
         );
         return;
     }

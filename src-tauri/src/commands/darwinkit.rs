@@ -143,7 +143,11 @@ pub fn call(method: &str, params: Option<Value>) -> Result<Value, String> {
 
 /// Send a JSON-RPC call with a custom timeout in seconds.
 /// Use longer timeouts for iCloud operations that may need to download evicted files.
-pub fn call_with_timeout(method: &str, params: Option<Value>, timeout_secs: u64) -> Result<Value, String> {
+pub fn call_with_timeout(
+    method: &str,
+    params: Option<Value>,
+    timeout_secs: u64,
+) -> Result<Value, String> {
     let sender = BRIDGE_SENDER
         .get()
         .ok_or_else(|| "DarwinKit bridge not started".to_string())?;
@@ -450,7 +454,10 @@ fn semantic_search_inner(
     index: &super::index::NoteIndex,
     embeddings: &super::embeddings::EmbeddingIndex,
 ) -> Result<Vec<SemanticResult>, String> {
-    if !super::settings::load_settings_from_file().map(|s| s.ai_features_enabled).unwrap_or(false) {
+    if !super::settings::load_settings_from_file()
+        .map(|s| s.ai_features_enabled)
+        .unwrap_or(false)
+    {
         return Ok(Vec::new());
     }
 
@@ -461,10 +468,7 @@ fn semantic_search_inner(
     embeddings.ensure_loaded();
 
     // Detect language
-    let lang_result = call(
-        "nlp.language",
-        Some(serde_json::json!({ "text": query })),
-    )?;
+    let lang_result = call("nlp.language", Some(serde_json::json!({ "text": query })))?;
     let language = lang_result
         .get("language")
         .and_then(|v| v.as_str())
@@ -538,7 +542,10 @@ fn suggest_folder_inner(
     current_folder: &str,
     embeddings: &super::embeddings::EmbeddingIndex,
 ) -> Result<Option<String>, String> {
-    if !super::settings::load_settings_from_file().map(|s| s.ai_features_enabled).unwrap_or(false) {
+    if !super::settings::load_settings_from_file()
+        .map(|s| s.ai_features_enabled)
+        .unwrap_or(false)
+    {
         return Ok(None);
     }
 
@@ -560,10 +567,7 @@ fn suggest_folder_inner(
     embeddings.ensure_loaded();
 
     // Detect language first — needed for language-filtered centroids
-    let lang_result = call(
-        "nlp.language",
-        Some(serde_json::json!({ "text": content })),
-    )?;
+    let lang_result = call("nlp.language", Some(serde_json::json!({ "text": content })))?;
     let language = lang_result
         .get("language")
         .and_then(|v| v.as_str())

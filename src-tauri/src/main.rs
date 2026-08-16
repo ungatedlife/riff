@@ -10,9 +10,9 @@ mod windows;
 use commands::embeddings::EmbeddingIndex;
 use commands::index::NoteIndex;
 use commands::{
-    ai_assistant, analytics, apple_notes, cursor_positions, darwinkit, dictation, embeddings,
-    file_watcher, folders, git_share, icloud, index, macos_notify, note_lock, notes,
-    on_this_day, settings, share, stats, sticked_notes, storage,
+    ai_assistant, analytics, cursor_positions, darwinkit, dictation, embeddings, file_watcher,
+    folders, git_share, icloud, index, macos_notify, note_lock, notes, on_this_day, settings,
+    share, stats, sticked_notes, storage,
 };
 use shortcuts::shortcut_to_string;
 use state::AppState;
@@ -48,14 +48,19 @@ fn handle_opened_files(app: &AppHandle, paths: Vec<std::path::PathBuf>) {
 
             let content = match tauri::async_runtime::spawn_blocking(move || {
                 std::fs::read_to_string(&path_for_read)
-            }).await {
+            })
+            .await
+            {
                 Ok(Ok(content)) => content,
                 Ok(Err(err)) => {
                     eprintln!("Failed to read opened markdown file {}: {}", path_str, err);
                     return;
                 }
                 Err(err) => {
-                    eprintln!("Failed to read opened markdown file {}: task join error: {}", path_str, err);
+                    eprintln!(
+                        "Failed to read opened markdown file {}: task join error: {}",
+                        path_str, err
+                    );
                     return;
                 }
             };
@@ -66,7 +71,9 @@ fn handle_opened_files(app: &AppHandle, paths: Vec<std::path::PathBuf>) {
                 .map(|root| folder_for_opened_note(&path, &root))
                 .unwrap_or_default();
 
-            if let Err(err) = windows::open_note_for_viewing(app_handle, content, folder, path_str).await {
+            if let Err(err) =
+                windows::open_note_for_viewing(app_handle, content, folder, path_str).await
+            {
                 eprintln!("Failed to open markdown file from Finder: {}", err);
             }
         });
@@ -181,8 +188,7 @@ fn clip_capture(app: &AppHandle) {
             // Clear the warned flag now that capture actually works —
             // if it breaks later (permission revoked, Settings closed
             // the app out), we're allowed to warn again.
-            CLIP_PERMISSION_WARNED
-                .store(false, std::sync::atomic::Ordering::Relaxed);
+            CLIP_PERMISSION_WARNED.store(false, std::sync::atomic::Ordering::Relaxed);
 
             // Notify any open webview (Command Palette, manager) that a
             // new file exists so they can refresh. file_watcher would
@@ -191,11 +197,7 @@ fn clip_capture(app: &AppHandle) {
             let _ = app.emit("files-changed", vec![result.path.clone()]);
 
             let preview: String = text.lines().next().unwrap_or("").chars().take(60).collect();
-            let _ = macos_notify::show(
-                "Stik",
-                &format!("Saved to {}", folder),
-                &preview,
-            );
+            let _ = macos_notify::show("Stik", &format!("Saved to {}", folder), &preview);
         }
         Err(e) => {
             log(&format!("save failed: {}", e));
@@ -436,7 +438,6 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             notes::save_note,
             notes::update_note,
@@ -504,11 +505,6 @@ fn main() {
             ai_assistant::ai_summarize,
             ai_assistant::ai_organize,
             ai_assistant::ai_generate,
-            apple_notes::list_apple_notes,
-            apple_notes::import_apple_note,
-            apple_notes::check_apple_notes_access,
-            apple_notes::open_full_disk_access_settings,
-            windows::show_apple_notes_picker_cmd,
             cursor_positions::get_cursor_position,
             cursor_positions::save_cursor_position,
             cursor_positions::remove_cursor_position,
@@ -627,7 +623,9 @@ fn main() {
                         .spawn(move || {
                             // Wait for DarwinKit to become available
                             for _ in 0..20 {
-                                if darwinkit::is_available() { break; }
+                                if darwinkit::is_available() {
+                                    break;
+                                }
                                 std::thread::sleep(std::time::Duration::from_millis(500));
                             }
 
@@ -666,10 +664,6 @@ fn main() {
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::Focused(focused) = event {
                         if !focused {
-                            // Don't hide when Apple Notes picker took focus
-                            if w.app_handle().get_webview_window("apple-notes-picker").is_some() {
-                                return;
-                            }
                             let _ = w.emit("postit-blur", ());
                         }
                     }
@@ -699,8 +693,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
     use super::folder_for_opened_note;
+    use std::path::Path;
 
     #[test]
     fn file_in_stik_subfolder_returns_folder_name() {

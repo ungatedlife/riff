@@ -2,12 +2,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { check } from "@tauri-apps/plugin-updater";
 import PostIt from "./components/PostIt";
 import SettingsModal from "./components/SettingsModal";
 import CommandPalette from "./components/CommandPalette";
 import AnalyticsNotice from "./components/AnalyticsNotice";
-import AppleNotesPicker from "./components/AppleNotesPicker";
 import { useTheme } from "./hooks/useTheme";
 import type { StickedNote, StikSettings } from "@/types";
 import { isMarkdownEffectivelyEmpty } from "@/utils/normalizeMarkdownForCopy";
@@ -15,13 +13,7 @@ import { shouldHideCaptureOnBlur } from "@/utils/blurAutoHide";
 import { resolveCaptureFolder } from "@/utils/folderSelection";
 import { useLanguageSync, useTranslation } from "@/hooks/useTranslation";
 
-type WindowType =
-  | "postit"
-  | "sticked"
-  | "settings"
-  | "command-palette"
-  | "apple-notes-picker";
-const PENDING_UPDATE_KEY = "stik_pending_update_version";
+type WindowType = "postit" | "sticked" | "settings" | "command-palette";
 
 function getWindowInfo(): { type: WindowType; id?: string; viewing?: boolean } {
   const params = new URLSearchParams(window.location.search);
@@ -45,10 +37,6 @@ function getWindowInfo(): { type: WindowType; id?: string; viewing?: boolean } {
     windowType === "command-palette"
   ) {
     return { type: "command-palette" };
-  }
-
-  if (windowType === "apple-notes-picker") {
-    return { type: "apple-notes-picker" };
   }
 
   return { type: "postit" };
@@ -290,51 +278,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [windowInfo.type]);
 
-  // Silent auto-update on startup (postit window only, production builds)
-  useEffect(() => {
-    if (windowInfo.type !== "postit") return;
-    // Skip in dev: downloadAndInstall() extracts to a temp dir and spawns
-    // a second Stik process (the released build), causing version conflicts.
-    if (window.location.port) return;
-
-    const runAutoUpdate = async () => {
-      try {
-        const settings = await invoke<StikSettings>("get_settings");
-        if (settings.auto_update_enabled === false) {
-          console.debug("Auto-update skipped: disabled in settings");
-          return;
-        }
-
-        const update = await check({ timeout: 15_000 });
-        if (!update) {
-          localStorage.removeItem(PENDING_UPDATE_KEY);
-          return;
-        }
-
-        const pendingVersion = localStorage.getItem(PENDING_UPDATE_KEY);
-        if (pendingVersion === update.version) {
-          console.log(
-            `Update v${update.version} already installed and pending restart`,
-          );
-          return;
-        }
-
-        console.log(
-          `Stik update available: v${update.currentVersion} → v${update.version}`,
-        );
-        await update.downloadAndInstall();
-        localStorage.setItem(PENDING_UPDATE_KEY, update.version);
-        console.log(
-          `Update v${update.version} installed; will apply on next restart`,
-        );
-      } catch (error) {
-        console.error("Auto-update failed:", error);
-      }
-    };
-
-    void runAutoUpdate();
-  }, [windowInfo.type]);
-
   // One-time notices for existing users
   useEffect(() => {
     if (windowInfo.type !== "postit") return;
@@ -407,11 +350,6 @@ export default function App() {
   // Render command palette if this is that window type
   if (windowInfo.type === "command-palette") {
     return <CommandPalette />;
-  }
-
-  // Render Apple Notes picker if this is that window type
-  if (windowInfo.type === "apple-notes-picker") {
-    return <AppleNotesPicker />;
   }
 
   // Render sticked note if this is a sticked window

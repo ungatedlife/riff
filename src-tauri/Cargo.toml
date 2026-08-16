@@ -5,20 +5,14 @@ description = "Instant thought capture"
 authors = ["Massi"]
 edition = "2021"
 
-[lib]
-name = "stik_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-prost-build = "0.13"
 
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "protocol-asset", "devtools"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
-tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
@@ -31,9 +25,6 @@ base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png"] }
 tauri-plugin-dialog = "2.6.0"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-rusqlite = { version = "0.31", features = ["bundled"] }
-flate2 = "1"
-prost = "0.13"
 aes-gcm = "0.10"
 rand = "0.9"
 notify = { version = "7", default-features = false, features = ["macos_fsevent"] }
@@ -46,9 +37,6 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSVi
 core-graphics = "0.24"
 core-foundation = "0.10"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSData", "NSDictionary", "NSGeometry"] }
-
-[dev-dependencies]
-glib = ">=0.20"
 
 [features]
 # The custom-protocol feature tells tauri-codegen to embed the frontend
