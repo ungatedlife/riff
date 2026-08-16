@@ -21,7 +21,6 @@ pub struct NoteEntry {
     pub preview: String,
     pub created: String,
     pub content_len: usize,
-    pub locked: bool,
 }
 
 pub struct NoteIndex {
@@ -202,9 +201,6 @@ impl NoteIndex {
         let mut results: Vec<(NoteEntry, String)> = Vec::new();
 
         for entry in entries.values() {
-            if entry.locked {
-                continue; // Can't search encrypted content
-            }
             if let Some(f) = folder {
                 if entry.folder != f {
                     continue;
@@ -240,32 +236,17 @@ pub fn rebuild_index(index: tauri::State<'_, NoteIndex>) -> Result<bool, String>
 fn read_note_entry(path: &PathBuf, folder: &str) -> Option<NoteEntry> {
     let path_str = path.to_string_lossy();
     let content = super::storage::read_file(&path_str).ok()?;
-    let locked = super::note_lock::is_locked_content(&content);
 
-    let (title, preview, content_len) = if locked {
-        // Derive title from filename: YYYYMMDD-HHMMSS-slug-uuid.md → slug
-        let fname = path.file_stem().unwrap_or_default().to_string_lossy();
-        let title = fname
-            .splitn(3, '-') // ["YYYYMMDD", "HHMMSS", "slug-uuid"]
-            .nth(2) // "slug-uuid"
-            .and_then(|rest| rest.rfind('-').map(|i| &rest[..i])) // drop UUID suffix
-            .filter(|s| !s.is_empty())
-            .map(|s| s.replace('-', " "))
-            .unwrap_or_else(|| fname.to_string());
-        (title, String::new(), 0)
+    let content_len = content.len();
+    let title = extract_title(&content);
+    let preview = if content.len() > PREVIEW_LENGTH {
+        let mut end = PREVIEW_LENGTH;
+        while end > 0 && !content.is_char_boundary(end) {
+            end -= 1;
+        }
+        content[..end].to_string()
     } else {
-        let content_len = content.len();
-        let title = extract_title(&content);
-        let preview = if content.len() > PREVIEW_LENGTH {
-            let mut end = PREVIEW_LENGTH;
-            while end > 0 && !content.is_char_boundary(end) {
-                end -= 1;
-            }
-            content[..end].to_string()
-        } else {
-            content
-        };
-        (title, preview, content_len)
+        content
     };
 
     let filename = path
@@ -287,7 +268,6 @@ fn read_note_entry(path: &PathBuf, folder: &str) -> Option<NoteEntry> {
         preview,
         created,
         content_len,
-        locked,
     })
 }
 

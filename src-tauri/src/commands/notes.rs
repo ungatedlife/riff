@@ -4,10 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use super::analytics;
-use super::embeddings::{self, EmbeddingIndex};
 use super::folders::get_stik_folder;
-use super::git_share;
 use super::index::NoteIndex;
 use crate::state::{AppState, LastSavedNote};
 
@@ -25,8 +22,6 @@ pub struct NoteInfo {
     pub folder: String,
     pub content: String,
     pub created: String,
-    #[serde(default)]
-    pub locked: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -37,8 +32,6 @@ pub struct SearchResult {
     pub title: String,
     pub snippet: String,
     pub created: String,
-    #[serde(default)]
-    pub locked: bool,
 }
 
 /// Generate a slug from content (first 5 words, max 40 chars)
@@ -124,33 +117,14 @@ pub fn save_note_inner(folder: String, content: String) -> Result<NoteSaved, Str
     })
 }
 
-/// Post-save side effects: analytics, indexing, embeddings, last_saved_note tracking.
-/// Callable from both the Tauri command and the clipboard capture shortcut handler.
-pub fn post_save_processing(app: &AppHandle, result: &NoteSaved, content: &str) {
+/// Post-save side effects: indexing and last_saved_note tracking.
+pub fn post_save_processing(app: &AppHandle, result: &NoteSaved, _content: &str) {
     if result.path.is_empty() {
         return;
     }
 
-    let word_count = content.split_whitespace().count();
-    analytics::track(
-        "note_created",
-        serde_json::json!({ "word_count": word_count }),
-    );
-
     let index = app.state::<NoteIndex>();
     index.add(&result.path, &result.folder);
-    git_share::notify_note_changed(&result.folder);
-
-    if super::settings::load_settings_from_file()
-        .map(|s| s.ai_features_enabled)
-        .unwrap_or(false)
-    {
-        let emb_index = app.state::<EmbeddingIndex>();
-        if let Some(emb) = embeddings::embed_content(content) {
-            emb_index.add_entry(&result.path, emb);
-            let _ = emb_index.save();
-        }
-    }
 
     let state = app.state::<AppState>();
     let mut last = state
@@ -164,13 +138,7 @@ pub fn post_save_processing(app: &AppHandle, result: &NoteSaved, content: &str) 
 }
 
 #[tauri::command]
-pub fn save_note(
-    app: AppHandle,
-    folder: String,
-    content: String,
-    _index: State<'_, NoteIndex>,
-    _emb_index: State<'_, EmbeddingIndex>,
-) -> Result<NoteSaved, String> {
+pub fn save_note(app: AppHandle, folder: String, content: String) -> Result<NoteSaved, String> {
     let result = save_note_inner(folder, content.clone())?;
     post_save_processing(&app, &result, &content);
     Ok(result)
@@ -186,7 +154,6 @@ pub fn list_notes(
     Ok(entries
         .into_iter()
         .map(|e| NoteInfo {
-            locked: e.locked,
             path: e.path,
             filename: e.filename,
             folder: e.folder,
@@ -211,7 +178,6 @@ pub fn search_notes(
     Ok(results
         .into_iter()
         .map(|(entry, snippet)| SearchResult {
-            locked: entry.locked,
             path: entry.path,
             filename: entry.filename,
             folder: entry.folder,
@@ -263,7 +229,6 @@ pub fn update_note(
     path: String,
     content: String,
     index: State<'_, NoteIndex>,
-    emb_index: State<'_, EmbeddingIndex>,
 ) -> Result<NoteSaved, String> {
     let stik_folder = get_stik_folder()?;
     let note_path = PathBuf::from(&path);
@@ -292,8 +257,6 @@ pub fn update_note(
     if in_stik_folder && is_effectively_empty_markdown(&content) {
         super::storage::delete_file(&path).map_err(|e| format!("Failed to delete note: {}", e))?;
         index.remove(&path);
-        emb_index.remove_entry(&path);
-        let _ = emb_index.save();
         return Ok(NoteSaved {
             path: String::new(),
             folder: String::new(),
@@ -316,25 +279,9 @@ pub fn update_note(
     // Write updated content
     super::storage::write_file(&path, &content)?;
 
-    let word_count = content.split_whitespace().count();
-    analytics::track(
-        "note_updated",
-        serde_json::json!({ "word_count": word_count }),
-    );
-
     if in_stik_folder {
         // Re-index with updated content
         index.add(&path, &folder);
-        git_share::notify_note_changed(&folder);
-        if super::settings::load_settings_from_file()
-            .map(|s| s.ai_features_enabled)
-            .unwrap_or(false)
-        {
-            if let Some(emb) = embeddings::embed_content(&content) {
-                emb_index.add_entry(&path, emb);
-                let _ = emb_index.save();
-            }
-        }
     }
 
     Ok(NoteSaved {
@@ -349,7 +296,6 @@ pub fn delete_note(
     app: AppHandle,
     path: String,
     index: State<'_, NoteIndex>,
-    emb_index: State<'_, EmbeddingIndex>,
 ) -> Result<bool, String> {
     let stik_folder = get_stik_folder()?;
     let note_path = PathBuf::from(&path);
@@ -364,12 +310,6 @@ pub fn delete_note(
         return Err("Note file does not exist".to_string());
     }
 
-    let folder = note_path
-        .parent()
-        .and_then(|p| p.file_name())
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-
     // Delete referenced .assets/ images
     if let Ok(content) = super::storage::read_file(&path) {
         let folder_path = note_path.parent().unwrap_or(&stik_folder);
@@ -378,11 +318,7 @@ pub fn delete_note(
 
     // Delete the file
     super::storage::delete_file(&path).map_err(|e| format!("Failed to delete note: {}", e))?;
-    analytics::track("note_deleted", serde_json::json!({}));
     index.remove(&path);
-    emb_index.remove_entry(&path);
-    let _ = emb_index.save();
-    git_share::notify_note_changed(&folder);
 
     // Notify any viewing windows so they can close themselves
     let _ = app.emit("note-deleted", &path);
@@ -395,7 +331,6 @@ pub fn move_note(
     path: String,
     target_folder: String,
     index: State<'_, NoteIndex>,
-    emb_index: State<'_, EmbeddingIndex>,
 ) -> Result<NoteInfo, String> {
     let stik_folder = get_stik_folder()?;
     let source_path = PathBuf::from(&path);
@@ -444,22 +379,16 @@ pub fn move_note(
 
     let new_path_str = target_path.to_string_lossy().to_string();
     index.move_entry(&path, &new_path_str, &target_folder);
-    emb_index.move_entry(&path, &new_path_str);
-    let _ = emb_index.save();
-    git_share::notify_note_changed(&source_folder);
-    git_share::notify_note_changed(&target_folder);
 
     // Extract created date from filename
     let created = filename.split('-').take(2).collect::<Vec<_>>().join("-");
 
-    let locked = super::note_lock::is_locked_content(&content);
     Ok(NoteInfo {
         path: new_path_str,
         filename,
         folder: target_folder,
         content,
         created,
-        locked,
     })
 }
 

@@ -15,20 +15,6 @@
     "core:event:default",
     "global-shortcut:default",
     "shell:allow-open",
-    "dialog:default",
-    {
-      "identifier": "fs:allow-read-text-file",
-      "allow": [
-        { "path": "$DOCUMENT/Stik/**" },
-        { "path": "$HOME/.stik/**" }
-      ]
-    },
-    {
-      "identifier": "fs:allow-write-text-file",
-      "allow": [
-        { "path": "$DOCUMENT/Stik/**" },
-        { "path": "$HOME/.stik/**" }
-      ]
-    }
+    "dialog:default"
   ]
 }

@@ -139,21 +139,6 @@ body,
   padding-bottom: 40px;
 }
 
-/* ── Image capture: hide chrome, clip to rounded PostIt shape ── */
-.capturing-image {
-  border-radius: 14px;
-  overflow: hidden;
-}
-
-.capturing-image [data-capture-hide],
-.capturing-image .formatting-toolbar {
-  display: none !important;
-}
-
-.capturing-image .has-formatting-toolbar .cm-editor {
-  padding-bottom: 12px;
-}
-
 /* ── Zen mode: distraction-free writing (Cmd+.) ── */
 /* Collapse the header to a thin invisible drag strip so the window stays
    draggable — hiding it entirely removes the onMouseDown startDragging handler. */

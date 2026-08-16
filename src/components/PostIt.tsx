@@ -10,8 +10,6 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import Editor, { type EditorRef } from "./Editor";
 import FolderPicker from "./FolderPicker";
-import AiMenu from "./AiMenu";
-import SpeechButton from "./SpeechButton";
 import type { StickedNote, StikSettings } from "@/types";
 import type { VimMode } from "@/extensions/cm-vim";
 import {
@@ -34,7 +32,6 @@ import { resolveCaptureFolder } from "@/utils/folderSelection";
 import { getFolderColor } from "@/utils/folderColors";
 import { formatShortcutDisplay } from "./ShortcutRecorder";
 import { loadGoogleFont, loadCustomFont } from "@/utils/fonts";
-import SyncIndicator from "./SyncIndicator";
 import { useTranslation } from "@/hooks/useTranslation";
 
 interface PostItProps {
@@ -64,7 +61,7 @@ function fallbackHtmlFromPlainText(text: string): string {
   return `<pre>${escaped}</pre>`;
 }
 
-type CopyMode = "markdown" | "rich" | "image";
+type CopyMode = "markdown" | "rich";
 
 function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   const [isVisible, setIsVisible] = useState(false);
@@ -109,11 +106,9 @@ export default function PostIt({
   const { t } = useTranslation();
   const [content, setContent] = useState(initialContent || "");
   const [showPicker, setShowPicker] = useState(false);
-  const [suggestedFolder, setSuggestedFolder] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isPinning, setIsPinning] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
-  const [copyMode, setCopyMode] = useState<CopyMode | null>(null);
   const [isCopyMenuOpen, setIsCopyMenuOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   // Viewing mode starts unpinned, regular sticked notes start pinned
@@ -137,14 +132,7 @@ export default function PostIt({
   const [textDirection, setTextDirection] = useState<"auto" | "ltr" | "rtl">(
     "auto",
   );
-  const [icloudEnabled, setIcloudEnabled] = useState(false);
   const [zenMode, setZenMode] = useState(false);
-  const [dictationActiveModel, setDictationActiveModel] = useState<
-    string | null
-  >(null);
-  const [dictationLanguage, setDictationLanguage] = useState<string | null>(
-    null,
-  );
   const [formatToolbar, setFormatToolbar] = useState(() => {
     try {
       return localStorage.getItem("stik:format-toolbar") !== "0";
@@ -154,10 +142,6 @@ export default function PostIt({
   });
   const commandInputRef = useRef<HTMLInputElement | null>(null);
   const editorRef = useRef<EditorRef | null>(null);
-  const speechRef = useRef<{ toggle: () => void } | null>(null);
-  // Tracks how many chars the last dictation partial inserted, so the next
-  // partial replaces only its own previous text (not everything after cursor).
-  const speechPartialLenRef = useRef(0);
   const copyMenuRef = useRef<HTMLDivElement | null>(null);
   const foldersRef = useRef<string[]>([]);
   const contentRef = useRef(content);
@@ -287,9 +271,6 @@ export default function PostIt({
         setTextDirection(
           (s.text_direction as "auto" | "ltr" | "rtl") || "auto",
         );
-        setIcloudEnabled(s.icloud?.enabled ?? false);
-        setDictationActiveModel(s.dictation?.active_model ?? null);
-        setDictationLanguage(s.dictation?.active_language ?? null);
       })
       .catch(() => {});
     invoke<string[]>("list_folders")
@@ -310,9 +291,6 @@ export default function PostIt({
       setTextDirection(
         (event.payload.text_direction as "auto" | "ltr" | "rtl") || "auto",
       );
-      setIcloudEnabled(event.payload.icloud?.enabled ?? false);
-      setDictationActiveModel(event.payload.dictation?.active_model ?? null);
-      setDictationLanguage(event.payload.dictation?.active_language ?? null);
     });
     return () => {
       unlisten.then((fn) => fn());
@@ -662,53 +640,6 @@ export default function PostIt({
     return () => window.removeEventListener("keydown", handleZenToggle);
   }, [systemShortcuts.zen_mode]);
 
-  // Dictation shortcut (reads from settings, defaults to Cmd+Shift+D)
-  useEffect(() => {
-    const shortcutStr = systemShortcuts.dictation || "Cmd+Shift+D";
-    const handleDictation = (e: KeyboardEvent) => {
-      const parts = shortcutStr.split("+");
-      const key = parts[parts.length - 1];
-      const needsMeta = parts.some(
-        (p) => p === "Cmd" || p === "Command" || p === "Meta",
-      );
-      const needsShift = parts.some((p) => p === "Shift");
-      const needsAlt = parts.some((p) => p === "Alt" || p === "Option");
-      const needsCtrl = parts.some((p) => p === "Ctrl" || p === "Control");
-
-      if (needsMeta !== e.metaKey) return;
-      if (needsShift !== e.shiftKey) return;
-      if (needsAlt !== e.altKey) return;
-      if (needsCtrl !== e.ctrlKey) return;
-
-      const eventKey =
-        e.key === "." ? "Period" : e.key === "," ? "Comma" : e.key;
-      if (eventKey.toLowerCase() !== key.toLowerCase()) return;
-
-      e.preventDefault();
-      speechRef.current?.toggle();
-    };
-    window.addEventListener("keydown", handleDictation);
-    return () => window.removeEventListener("keydown", handleDictation);
-  }, [systemShortcuts.dictation]);
-
-  // Voice-note global shortcut — Rust fires `start-dictation` after
-  // showing the postit window. The listener is mounted once for the
-  // lifetime of the postit webview, so late-firing events (e.g. fired
-  // before focus transition completes) still land correctly.
-  useEffect(() => {
-    const unlisten = listen("start-dictation", () => {
-      // Small delay to make sure the window is focused and the editor
-      // has committed its mount before we toggle the mic — without it,
-      // the cursor position captured by getInsertOrigin can be stale.
-      window.setTimeout(() => {
-        speechRef.current?.toggle();
-      }, 80);
-    });
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, []);
-
   // CMD+/CMD-/CMD+0 to adjust editor font size
   useEffect(() => {
     const handleZoom = (e: KeyboardEvent) => {
@@ -802,7 +733,6 @@ export default function PostIt({
 
       flushSync(() => {
         setIsCopying(true);
-        setCopyMode(mode);
         setIsCopyMenuOpen(false);
       });
 
@@ -824,53 +754,19 @@ export default function PostIt({
           });
 
           showToast(t("postit.copiedRichText"));
-        } else if (mode === "markdown") {
+        } else {
           const markdownText = normalizeMarkdownForCopy(content);
           const copied = await copyPlainText(markdownText);
           if (!copied) {
             throw new Error(t("postit.markdownCopyFailed"));
           }
           showToast(t("postit.copiedMarkdown"));
-        } else {
-          const activeElement = document.activeElement as HTMLElement | null;
-          const shouldRestoreEditorFocus =
-            !!activeElement?.closest(".stik-editor");
-
-          if (shouldRestoreEditorFocus) {
-            editorRef.current?.blur();
-          }
-
-          // Hide chrome (header, footer, toolbar) so the screenshot is content-only
-          document.documentElement.classList.add("capturing-image");
-          try {
-            await new Promise<void>((resolve) => {
-              requestAnimationFrame(() =>
-                requestAnimationFrame(() => resolve()),
-              );
-            });
-            await invoke("copy_visible_note_image_to_clipboard");
-            showToast(t("postit.copiedImage"));
-          } finally {
-            document.documentElement.classList.remove("capturing-image");
-            if (shouldRestoreEditorFocus) {
-              editorRef.current?.focus();
-            }
-          }
         }
       } catch (error) {
         console.error("Failed to copy note:", error);
-        if (
-          mode === "image" &&
-          error instanceof Error &&
-          error.message.includes("not supported")
-        ) {
-          showToast(t("postit.imageCopyUnsupported"));
-        } else {
-          showToast(t("postit.copyFailed"));
-        }
+        showToast(t("postit.copyFailed"));
       } finally {
         setIsCopying(false);
-        setCopyMode(null);
       }
     },
     [content, folder, isCopying, copyPlainText, showToast],
@@ -1385,33 +1281,6 @@ export default function PostIt({
     return () => clearTimeout(timer);
   }, [isSticked, currentStickedId, isPinned, content]);
 
-  // Folder suggestion (capture mode only, debounced 1.5s)
-  useEffect(() => {
-    if (isSticked || content.length < 30) {
-      setSuggestedFolder(null);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      try {
-        const suggestion = await invoke<string | null>("suggest_folder", {
-          content,
-          currentFolder: folder,
-        });
-        setSuggestedFolder(suggestion);
-      } catch {
-        setSuggestedFolder(null);
-      }
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [content, folder, isSticked]);
-
-  // Clear suggestion when folder changes
-  useEffect(() => {
-    setSuggestedFolder(null);
-  }, [folder]);
-
   // Handle wiki-link click: open the referenced note for viewing
   const handleWikiLinkClick = useCallback(
     async (_slug: string, path: string) => {
@@ -1610,19 +1479,6 @@ export default function PostIt({
                   <span className="text-[8px] opacity-50">▼</span>
                 </button>
 
-                {suggestedFolder && (
-                  <button
-                    data-capture-hide
-                    onClick={() => {
-                      onFolderChange(suggestedFolder);
-                      setSuggestedFolder(null);
-                    }}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-pill text-[10px] font-medium bg-coral/10 text-coral hover:bg-coral/20 transition-colors"
-                  >
-                    <span>→</span>
-                    <span>{suggestedFolder}?</span>
-                  </button>
-                )}
               </div>
 
               <div
@@ -1630,29 +1486,27 @@ export default function PostIt({
                 className="flex items-center gap-3 text-[10px] text-stone"
               >
                 <div className="relative" ref={copyMenuRef}>
-                  {!(isCopying && copyMode === "image") && (
-                    <button
-                      onClick={() => setIsCopyMenuOpen((open) => !open)}
-                      className={`p-1 rounded-md transition-colors ${
-                        isCopyMenuOpen
-                          ? "text-coral bg-coral-light"
-                          : "text-stone hover:bg-line hover:text-ink"
-                      }`}
-                      title={t("postit.actions")}
+                  <button
+                    onClick={() => setIsCopyMenuOpen((open) => !open)}
+                    className={`p-1 rounded-md transition-colors ${
+                      isCopyMenuOpen
+                        ? "text-coral bg-coral-light"
+                        : "text-stone hover:bg-line hover:text-ink"
+                    }`}
+                    title={t("postit.actions")}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 14 14"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
                     >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 14 14"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <circle cx="7" cy="3" r="1.2" fill="currentColor" />
-                        <circle cx="7" cy="7" r="1.2" fill="currentColor" />
-                        <circle cx="7" cy="11" r="1.2" fill="currentColor" />
-                      </svg>
-                    </button>
-                  )}
+                      <circle cx="7" cy="3" r="1.2" fill="currentColor" />
+                      <circle cx="7" cy="7" r="1.2" fill="currentColor" />
+                      <circle cx="7" cy="11" r="1.2" fill="currentColor" />
+                    </svg>
+                  </button>
 
                   {isCopyMenuOpen && (
                     <div className="absolute top-full right-0 mt-1 w-40 rounded-lg border border-line bg-bg shadow-stik overflow-hidden z-[240]">
@@ -1668,94 +1522,9 @@ export default function PostIt({
                       >
                         {t("postit.copyMarkdown")}
                       </button>
-                      <button
-                        onClick={() => void handleCopy("image")}
-                        className="w-full px-3 py-2 text-left text-[11px] text-ink hover:bg-line/50 transition-colors"
-                      >
-                        {t("postit.copyImage")}
-                      </button>
                     </div>
                   )}
                 </div>
-
-                <SpeechButton
-                  ref={speechRef}
-                  activeModel={dictationActiveModel}
-                  language={dictationLanguage}
-                  onActiveModelSelected={async (modelId, lang) => {
-                    // Persist the modal choice into settings.json so
-                    // next launch / ⌘⇧V use the same model without
-                    // reprompting. Also update local state so the
-                    // current session reflects the choice immediately.
-                    try {
-                      const current =
-                        await invoke<StikSettings>("get_settings");
-                      const next: StikSettings = {
-                        ...current,
-                        dictation: {
-                          active_model: modelId,
-                          active_language: lang,
-                          enabled: current.dictation?.enabled ?? true,
-                        },
-                      };
-                      await invoke("save_settings", { settings: next });
-                      setDictationActiveModel(modelId);
-                      setDictationLanguage(lang);
-                      await getCurrentWindow().emit("settings-changed", next);
-                    } catch (e) {
-                      console.error("Failed to persist dictation choice:", e);
-                    }
-                  }}
-                  getInsertOrigin={() => {
-                    const view = editorRef.current?.getView();
-                    speechPartialLenRef.current = 0;
-                    return view ? view.state.selection.main.head : 0;
-                  }}
-                  onPartialText={(text, from) => {
-                    const view = editorRef.current?.getView();
-                    if (!view) return;
-                    // Replace only the previous partial insertion — not
-                    // everything to end-of-doc — so text after the cursor
-                    // is preserved when dictating mid-document.
-                    const to = Math.min(
-                      from + speechPartialLenRef.current,
-                      view.state.doc.length,
-                    );
-                    view.dispatch({
-                      changes: { from, to, insert: text },
-                      selection: { anchor: from + text.length },
-                    });
-                    speechPartialLenRef.current = text.length;
-                  }}
-                  onTranscription={(text, from) => {
-                    const view = editorRef.current?.getView();
-                    if (view) {
-                      const to = Math.min(
-                        from + speechPartialLenRef.current,
-                        view.state.doc.length,
-                      );
-                      view.dispatch({
-                        changes: { from, to, insert: text },
-                        selection: { anchor: from + text.length },
-                      });
-                      setContent(view.state.doc.toString());
-                    } else {
-                      setContent((prev) => prev + (prev ? " " : "") + text);
-                    }
-                    speechPartialLenRef.current = 0;
-                  }}
-                />
-
-                <AiMenu
-                  content={content}
-                  folder={folder}
-                  onApplyText={(text) => {
-                    editorRef.current?.setContent(text);
-                    setContent(text);
-                  }}
-                  onShowToast={(msg) => setToast(msg)}
-                  disabled={!hasMeaningfulContent}
-                />
 
                 {isSticked && isPinned ? (
                   <div className="flex items-center gap-1.5">
@@ -1910,7 +1679,6 @@ export default function PostIt({
                     </>
                   )}
                 </span>
-                <SyncIndicator enabled={icloudEnabled} />
               </span>
               <div className="flex items-center gap-2">
                 {vimEnabled ? (

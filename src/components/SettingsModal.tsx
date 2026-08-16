@@ -1,17 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { flushSync } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import SettingsContent from "./SettingsContent";
 import SettingsFooterLinks from "./SettingsFooterLinks";
 import type { SettingsTab } from "./SettingsContent";
-import type {
-  CaptureStreakStatus,
-  GitSyncStatus,
-  OnThisDayStatus,
-  StikSettings,
-} from "@/types";
+import type { StikSettings } from "@/types";
 import { createCoalescedTaskRunner } from "@/utils/coalescedTaskRunner";
 import { useTranslation } from "@/hooks/useTranslation";
 import { channelLabel } from "@/utils/appChannel";
@@ -122,103 +116,6 @@ const TABS: { id: SettingsTab; labelKey: TranslationKey; icon: React.ReactNode }
       </svg>
     ),
   },
-  {
-    id: "git",
-    labelKey: "settings.tab.gitSharing",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <line x1="6" y1="3" x2="6" y2="15" />
-        <circle cx="18" cy="6" r="3" />
-        <circle cx="6" cy="18" r="3" />
-        <path d="M18 9a9 9 0 0 1-9 9" />
-      </svg>
-    ),
-  },
-  {
-    id: "ai",
-    labelKey: "settings.tab.ai",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-      </svg>
-    ),
-  },
-  {
-    id: "dictation",
-    labelKey: "settings.tab.dictation",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <rect x="9" y="2" width="6" height="12" rx="3" />
-        <path d="M5 10a7 7 0 0 0 14 0" />
-        <line x1="12" y1="17" x2="12" y2="22" />
-        <line x1="8" y1="22" x2="16" y2="22" />
-      </svg>
-    ),
-  },
-  {
-    id: "insights",
-    labelKey: "settings.tab.insights",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-      </svg>
-    ),
-  },
-  {
-    id: "privacy",
-    labelKey: "settings.tab.privacy",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-      </svg>
-    ),
-  },
 ];
 
 interface SettingsModalProps {
@@ -236,124 +133,8 @@ export default function SettingsModal({
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const [settings, setSettings] = useState<StikSettings | null>(null);
   const [folders, setFolders] = useState<string[]>([]);
-  const [captureStreak, setCaptureStreak] =
-    useState<CaptureStreakStatus | null>(null);
-  const [isRefreshingStreak, setIsRefreshingStreak] = useState(false);
-  const [onThisDayStatus, setOnThisDayStatus] =
-    useState<OnThisDayStatus | null>(null);
-  const [isCheckingOnThisDay, setIsCheckingOnThisDay] = useState(false);
-  const [gitSyncStatus, setGitSyncStatus] = useState<GitSyncStatus | null>(
-    null,
-  );
-  const [isPreparingGitRepo, setIsPreparingGitRepo] = useState(false);
-  const [isSyncingGitNow, setIsSyncingGitNow] = useState(false);
-  const [isOpeningGitRemote, setIsOpeningGitRemote] = useState(false);
   const [appVersion, setAppVersion] = useState("");
   const betaLabel = channelLabel(appVersion);
-
-  const waitForPaint = () =>
-    new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    });
-
-  const loadCaptureStreak = async () => {
-    setIsRefreshingStreak(true);
-    try {
-      const streak = await invoke<CaptureStreakStatus>("get_capture_streak");
-      setCaptureStreak(streak);
-    } catch (error) {
-      console.error("Failed to load capture streak:", error);
-      setCaptureStreak(null);
-    } finally {
-      setIsRefreshingStreak(false);
-    }
-  };
-
-  const checkOnThisDay = async () => {
-    setIsCheckingOnThisDay(true);
-    try {
-      const status = await invoke<OnThisDayStatus>("check_on_this_day_now");
-      setOnThisDayStatus(status);
-    } catch (error) {
-      console.error("Failed to check On This Day:", error);
-      setOnThisDayStatus({
-        found: false,
-        message: t("settings.onThisDayUnavailable"),
-        date: null,
-        folder: null,
-        preview: null,
-      });
-    } finally {
-      setIsCheckingOnThisDay(false);
-    }
-  };
-
-  const loadGitSyncStatus = async () => {
-    try {
-      const status = await invoke<GitSyncStatus>("git_get_sync_status");
-      setGitSyncStatus(status);
-    } catch (error) {
-      console.error("Failed to load git sync status:", error);
-      setGitSyncStatus(null);
-    }
-  };
-
-  const prepareGitRepository = async () => {
-    if (!settings) return;
-
-    flushSync(() => setIsPreparingGitRepo(true));
-    await waitForPaint();
-    try {
-      const status = await invoke<GitSyncStatus>("git_prepare_repository", {
-        folder: settings.git_sharing.shared_folder,
-        remoteUrl: settings.git_sharing.remote_url,
-        branch: settings.git_sharing.branch,
-        repositoryLayout: settings.git_sharing.repository_layout,
-      });
-      setGitSyncStatus(status);
-    } catch (error) {
-      console.error("Failed to prepare git repository:", error);
-      await loadGitSyncStatus();
-    } finally {
-      setIsPreparingGitRepo(false);
-    }
-  };
-
-  const syncGitNow = async () => {
-    if (!settings) return;
-
-    flushSync(() => setIsSyncingGitNow(true));
-    await waitForPaint();
-    try {
-      const status = await invoke<GitSyncStatus>("git_sync_now", {
-        folder: settings.git_sharing.shared_folder,
-        remoteUrl: settings.git_sharing.remote_url,
-        branch: settings.git_sharing.branch,
-        repositoryLayout: settings.git_sharing.repository_layout,
-      });
-      setGitSyncStatus(status);
-    } catch (error) {
-      console.error("Failed to sync notes with git:", error);
-      await loadGitSyncStatus();
-    } finally {
-      setIsSyncingGitNow(false);
-    }
-  };
-
-  const openGitRemote = async () => {
-    if (!settings?.git_sharing.remote_url.trim()) return;
-
-    setIsOpeningGitRemote(true);
-    try {
-      await invoke("git_open_remote_url", {
-        remoteUrl: settings.git_sharing.remote_url,
-      });
-    } catch (error) {
-      console.error("Failed to open remote URL:", error);
-    } finally {
-      setIsOpeningGitRemote(false);
-    }
-  };
 
   const [resolvedNotesDir, setResolvedNotesDir] = useState("");
 
@@ -364,9 +145,6 @@ export default function SettingsModal({
       invoke<string>("get_notes_directory")
         .then(setResolvedNotesDir)
         .catch(() => {});
-      loadCaptureStreak();
-      checkOnThisDay();
-      loadGitSyncStatus();
       getVersion()
         .then(setAppVersion)
         .catch(() => {});
@@ -489,24 +267,6 @@ export default function SettingsModal({
       folders={folders}
       onSettingsChange={handleSettingsChange}
       resolvedNotesDir={resolvedNotesDir}
-      captureStreakLabel={captureStreak?.label ?? t("settings.streakUnavailable")}
-      captureStreakDays={captureStreak?.days ?? null}
-      isRefreshingStreak={isRefreshingStreak}
-      onRefreshCaptureStreak={loadCaptureStreak}
-      onThisDayMessage={onThisDayStatus?.message ?? t("settings.onThisDayNoCheck")}
-      onThisDayPreview={onThisDayStatus?.preview ?? null}
-      onThisDayDate={onThisDayStatus?.date ?? null}
-      onThisDayFolder={onThisDayStatus?.folder ?? null}
-      isCheckingOnThisDay={isCheckingOnThisDay}
-      onCheckOnThisDay={checkOnThisDay}
-      gitSyncStatus={gitSyncStatus}
-      isPreparingGitRepo={isPreparingGitRepo}
-      isSyncingGitNow={isSyncingGitNow}
-      isOpeningGitRemote={isOpeningGitRemote}
-      onPrepareGitRepository={prepareGitRepository}
-      onSyncGitNow={syncGitNow}
-      onOpenGitRemote={openGitRemote}
-      onTabChange={setActiveTab}
     />
   );
 

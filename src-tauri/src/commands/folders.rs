@@ -27,14 +27,6 @@ fn list_visible_folder_names(stik_folder: &Path) -> Result<Vec<String>, String> 
     Ok(folders)
 }
 
-fn uses_folder_root_layout(settings: &StikSettings) -> bool {
-    !settings
-        .git_sharing
-        .repository_layout
-        .trim()
-        .eq_ignore_ascii_case("stik_root")
-}
-
 fn reconcile_settings_after_folder_delete(
     settings: &mut StikSettings,
     deleted_folder: &str,
@@ -50,10 +42,6 @@ fn reconcile_settings_after_folder_delete(
         if mapping.folder == deleted_folder {
             mapping.folder = fallback.to_string();
         }
-    }
-
-    if uses_folder_root_layout(settings) && settings.git_sharing.shared_folder == deleted_folder {
-        settings.git_sharing.shared_folder = fallback.to_string();
     }
 
     settings.folder_colors.remove(deleted_folder);
@@ -72,10 +60,6 @@ fn reconcile_settings_after_folder_rename(
         if mapping.folder == old_name {
             mapping.folder = new_name.to_string();
         }
-    }
-
-    if uses_folder_root_layout(settings) && settings.git_sharing.shared_folder == old_name {
-        settings.git_sharing.shared_folder = new_name.to_string();
     }
 
     if let Some(color) = settings.folder_colors.remove(old_name) {
@@ -147,7 +131,6 @@ pub fn create_folder(name: String) -> Result<bool, String> {
 pub fn delete_folder(
     name: String,
     index: tauri::State<'_, super::index::NoteIndex>,
-    emb_index: tauri::State<'_, super::embeddings::EmbeddingIndex>,
 ) -> Result<bool, String> {
     validate_name(&name)?;
 
@@ -163,11 +146,8 @@ pub fn delete_folder(
     super::storage::remove_dir_all(&folder_path.to_string_lossy())
         .map_err(|e| format!("Failed to delete folder: {}", e))?;
 
-    // Purge deleted notes from in-memory indices
+    // Purge deleted notes from the in-memory index
     index.remove_by_folder(&name);
-    let prefix = folder_path.to_string_lossy();
-    emb_index.remove_by_path_prefix(&prefix);
-    let _ = emb_index.save();
 
     let fallback = list_visible_folder_names(&stik_folder)?.into_iter().next();
     sync_settings_after_folder_delete(&name, fallback.as_deref())?;
@@ -241,7 +221,7 @@ mod tests {
         is_visible_folder_name, reconcile_settings_after_folder_delete,
         reconcile_settings_after_folder_rename, validate_name,
     };
-    use crate::commands::settings::{GitSharingSettings, ShortcutMapping, StikSettings};
+    use crate::commands::settings::{ShortcutMapping, StikSettings};
     use std::collections::HashMap;
 
     fn sample_settings() -> StikSettings {
@@ -259,14 +239,6 @@ mod tests {
                     enabled: true,
                 },
             ],
-            git_sharing: GitSharingSettings {
-                enabled: false,
-                shared_folder: "Inbox".to_string(),
-                remote_url: String::new(),
-                branch: "main".to_string(),
-                repository_layout: "folder_root".to_string(),
-                sync_interval_seconds: 300,
-            },
             folder_colors: HashMap::new(),
             system_shortcuts: HashMap::new(),
             ..StikSettings::default()
@@ -295,7 +267,6 @@ mod tests {
         assert_eq!(settings.default_folder, "Notes");
         assert_eq!(settings.shortcut_mappings[0].folder, "Notes");
         assert_eq!(settings.shortcut_mappings[1].folder, "Work");
-        assert_eq!(settings.git_sharing.shared_folder, "Notes");
     }
 
     #[test]
@@ -307,7 +278,6 @@ mod tests {
         assert_eq!(settings.default_folder, "");
         assert_eq!(settings.shortcut_mappings[0].folder, "");
         assert!(settings.shortcut_mappings[0].enabled);
-        assert_eq!(settings.git_sharing.shared_folder, "");
     }
 
     #[test]
@@ -319,6 +289,5 @@ mod tests {
         assert_eq!(settings.default_folder, "Notes");
         assert_eq!(settings.shortcut_mappings[0].folder, "Notes");
         assert_eq!(settings.shortcut_mappings[1].folder, "Work");
-        assert_eq!(settings.git_sharing.shared_folder, "Notes");
     }
 }

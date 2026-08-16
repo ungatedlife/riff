@@ -15,15 +15,6 @@ export interface ShortcutMapping {
   enabled: boolean;
 }
 
-export interface GitSharingSettings {
-  enabled: boolean;
-  shared_folder: string;
-  remote_url: string;
-  branch: string;
-  repository_layout: "folder_root" | "stik_root";
-  sync_interval_seconds: number;
-}
-
 export interface CustomTemplate {
   name: string;
   body: string;
@@ -53,47 +44,18 @@ export interface CustomThemeDefinition {
   colors: ThemeColors;
 }
 
-export interface ICloudSettings {
-  enabled: boolean;
-  migrated: boolean;
-}
-
-export interface ICloudStatus {
-  available: boolean;
-  enabled: boolean;
-  migrated: boolean;
-  container_url: string;
-  storage_mode: string;
-}
-
-export interface MigrationResult {
-  files_copied: number;
-  errors: string[];
-}
-
-export interface NoteLockSettings {
-  enabled: boolean;
-  timeout_minutes: number;
-  lock_on_sleep: boolean;
-}
-
 export interface StikSettings {
   shortcut_mappings: ShortcutMapping[];
   default_folder: string;
-  git_sharing: GitSharingSettings;
-  ai_features_enabled: boolean;
   vim_mode_enabled: boolean;
   theme_mode: string;
   notes_directory: string;
   hide_dock_icon: boolean;
   folder_colors: Record<string, string>;
   system_shortcuts: Record<string, string>;
-  analytics_enabled: boolean;
-  analytics_notice_dismissed: boolean;
   font_size: number;
   custom_templates: CustomTemplate[];
   sidebar_position: string;
-  auto_update_enabled: boolean;
   text_direction: string;
   hide_tray_icon: boolean;
   capture_window_size: [number, number] | null;
@@ -102,39 +64,9 @@ export interface StikSettings {
   font_family?: string | null; // null = system default
   window_opacity?: number; // 0.2–1.0, default 1.0
   custom_fonts?: CustomFontEntry[];
-  icloud: ICloudSettings;
-  note_lock: NoteLockSettings;
   use_directory_as_root?: boolean;
-  dictation?: DictationSettings;
   /// BCP-47 locale tag for the UI language. "" = follow system language.
   language?: string;
-}
-
-export interface DictationSettings {
-  active_model: string | null;
-  active_language: string | null;
-  enabled: boolean;
-}
-
-export interface DictationModelInfo {
-  id: string;
-  label: string;
-  size_mb: number;
-  description: string;
-  downloaded: boolean;
-}
-
-export interface DictationStatus {
-  installed_models: string[];
-  active_model: string | null;
-  downloading: string | null;
-}
-
-export interface DictationDownloadProgress {
-  model_id: string;
-  progress: number; // 0..1
-  bytes_done: number;
-  bytes_total: number;
 }
 
 export interface NoteInfo {
@@ -143,7 +75,6 @@ export interface NoteInfo {
   folder: string;
   content: string;
   created: string;
-  locked?: boolean;
 }
 
 export interface SearchResult {
@@ -153,17 +84,6 @@ export interface SearchResult {
   title: string;
   snippet: string;
   created: string;
-  locked?: boolean;
-}
-
-export interface SemanticResult {
-  path: string;
-  filename: string;
-  folder: string;
-  title: string;
-  snippet: string;
-  created: string;
-  similarity: number;
 }
 
 export interface FolderStats {
@@ -171,33 +91,7 @@ export interface FolderStats {
   note_count: number;
 }
 
-export interface CaptureStreakStatus {
-  days: number;
-  label: string;
-}
-
-export interface OnThisDayStatus {
-  found: boolean;
-  message: string;
-  date: string | null;
-  folder: string | null;
-  preview: string | null;
-}
-
 export interface ClipboardPayload {
   plain_text: string;
   html: string;
-}
-
-export interface GitSyncStatus {
-  enabled: boolean;
-  linked_folder: string | null;
-  remote_url: string | null;
-  branch: string;
-  repository_layout: "folder_root" | "stik_root";
-  repo_initialized: boolean;
-  pending_changes: boolean;
-  syncing: boolean;
-  last_sync_at: string | null;
-  last_error: string | null;
 }

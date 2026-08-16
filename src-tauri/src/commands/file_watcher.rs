@@ -1,6 +1,5 @@
 /// Local file system watcher for detecting external changes to notes.
-/// Mirrors the iCloud monitoring flow: detects .md file changes, updates the
-/// NoteIndex + EmbeddingIndex, and emits a frontend event.
+/// Detects .md file changes, updates the NoteIndex, and emits a frontend event.
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -8,9 +7,7 @@ use std::time::Duration;
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::embeddings::{self, EmbeddingIndex};
 use super::index::NoteIndex;
-use super::{notes, storage};
 
 static WATCHER_RUNNING: OnceLock<()> = OnceLock::new();
 
@@ -97,23 +94,10 @@ fn run(app: AppHandle, root: PathBuf) {
     drop(debouncer);
 }
 
-/// Shared handler: update NoteIndex, EmbeddingIndex, emit frontend event.
-/// Used by both the local file watcher and iCloud notification handler.
+/// Shared handler: update the NoteIndex and emit a frontend event.
 pub fn handle_changes(app: &AppHandle, paths: &[String]) {
     let index = app.state::<NoteIndex>();
     index.notify_external_change(paths);
-
-    let emb = app.state::<EmbeddingIndex>();
-    for path_str in paths {
-        if let Ok(content) = storage::read_file(path_str) {
-            if !notes::is_effectively_empty_markdown(&content) {
-                if let Some(embedding) = embeddings::embed_content(&content) {
-                    emb.add_entry(path_str, embedding);
-                }
-            }
-        }
-    }
-    let _ = emb.save();
 
     let _ = app.emit("files-changed", paths);
 }

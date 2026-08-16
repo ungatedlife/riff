@@ -2,34 +2,16 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type {
-  NoteInfo,
-  SearchResult,
-  SemanticResult,
-  FolderStats,
-  StikSettings,
-} from "@/types";
+import type { NoteInfo, SearchResult, FolderStats, StikSettings } from "@/types";
 import {
   extractNoteTitle,
   normalizeNoteSnippet,
 } from "@/utils/notePresentation";
 import ConfirmDialog from "./ConfirmDialog";
-import LockPrompt from "./LockPrompt";
 import FolderSidebar from "./command-palette/FolderSidebar";
 import NoteList from "./command-palette/NoteList";
 import MovePicker from "./command-palette/MovePicker";
 import { useTranslation } from "@/hooks/useTranslation";
-
-/** Derive a human-readable title from a Stik filename like `20260310-114522-my-note-a1b2.md` */
-function titleFromFilename(filename: string): string {
-  const stem = filename.replace(/\.md$/i, "");
-  const parts = stem.split("-");
-  // Skip YYYYMMDD, HHMMSS prefix and UUID suffix
-  if (parts.length > 3) {
-    return parts.slice(2, -1).join(" ");
-  }
-  return stem;
-}
 
 function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   const [isVisible, setIsVisible] = useState(false);
@@ -63,7 +45,6 @@ export default function CommandPalette() {
   // Search state
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [semanticResults, setSemanticResults] = useState<SemanticResult[]>([]);
   const [selectedNoteIndex, setSelectedNoteIndex] = useState(0);
   const [recentNotes, setRecentNotes] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -100,9 +81,6 @@ export default function CommandPalette() {
     folderName?: string;
   } | null>(null);
   const [showMoveModal, setShowMoveModal] = useState<SearchResult | null>(null);
-  const [lockPromptNote, setLockPromptNote] = useState<SearchResult | null>(
-    null,
-  );
   const [toast, setToast] = useState<string | null>(null);
 
   // Sidebar position (persisted in settings)
@@ -177,12 +155,9 @@ export default function CommandPalette() {
             path: n.path,
             filename: n.filename,
             folder: n.folder,
-            title: n.locked
-              ? titleFromFilename(n.filename)
-              : extractNoteTitle(n.content),
+            title: extractNoteTitle(n.content),
             snippet: normalizeNoteSnippet(n.content),
             created: n.created,
-            locked: n.locked,
           })),
         );
       },
@@ -193,7 +168,6 @@ export default function CommandPalette() {
   useEffect(() => {
     if (!query.trim()) {
       setResults(recentNotes);
-      setSemanticResults([]);
       setSelectedNoteIndex(0);
       return;
     }
@@ -202,29 +176,11 @@ export default function CommandPalette() {
       setIsSearching(true);
       const trimmed = query.trim();
 
-      const [textResult, semanticResult] = await Promise.allSettled([
-        invoke<SearchResult[]>("search_notes", {
-          query: trimmed,
-          folder: selectedFolder,
-        }),
-        invoke<SemanticResult[]>("semantic_search", {
-          query: trimmed,
-          folder: selectedFolder,
-        }),
-      ]);
-
-      const textResults =
-        textResult.status === "fulfilled" ? textResult.value : [];
+      const textResults = await invoke<SearchResult[]>("search_notes", {
+        query: trimmed,
+        folder: selectedFolder,
+      }).catch(() => [] as SearchResult[]);
       setResults(textResults);
-
-      if (semanticResult.status === "fulfilled") {
-        const textPaths = new Set(textResults.map((r) => r.path));
-        setSemanticResults(
-          semanticResult.value.filter((r) => !textPaths.has(r.path)),
-        );
-      } else {
-        setSemanticResults([]);
-      }
 
       setSelectedNoteIndex(0);
       setIsSearching(false);
@@ -264,9 +220,9 @@ export default function CommandPalette() {
   const openNote = useCallback(
     async (result: SearchResult) => {
       try {
-        const content = result.locked
-          ? await invoke<string>("read_locked_note", { path: result.path })
-          : await invoke<string>("get_note_content", { path: result.path });
+        const content = await invoke<string>("get_note_content", {
+          path: result.path,
+        });
         await invoke("open_note_for_viewing", {
           content,
           folder: result.folder,
@@ -283,17 +239,6 @@ export default function CommandPalette() {
 
   const handleSelectResult = useCallback(
     async (result: SearchResult) => {
-      if (result.locked) {
-        const authed = await invoke<boolean>("is_authenticated").catch(
-          () => false,
-        );
-        if (authed) {
-          await openNote(result);
-        } else {
-          setLockPromptNote(result);
-        }
-        return;
-      }
       await openNote(result);
     },
     [openNote],
@@ -311,12 +256,9 @@ export default function CommandPalette() {
       path: n.path,
       filename: n.filename,
       folder: n.folder,
-      title: n.locked
-        ? titleFromFilename(n.filename)
-        : extractNoteTitle(n.content),
+      title: extractNoteTitle(n.content),
       snippet: normalizeNoteSnippet(n.content),
       created: n.created,
-      locked: n.locked,
     }));
     setRecentNotes(recent);
 
@@ -338,12 +280,8 @@ export default function CommandPalette() {
     const unlistenFiles = listen("files-changed", () => {
       refreshAfterChange();
     });
-    const unlistenICloud = listen("icloud-files-changed", () => {
-      refreshAfterChange();
-    });
     return () => {
       unlistenFiles.then((fn) => fn());
-      unlistenICloud.then((fn) => fn());
     };
   }, [refreshAfterChange]);
 
@@ -553,7 +491,7 @@ export default function CommandPalette() {
   // Keyboard handler
   useEffect(() => {
     // Skip keyboard when overlays are active (they handle their own keys)
-    if (confirmDelete || showMoveModal || lockPromptNote) return;
+    if (confirmDelete || showMoveModal) return;
     // Skip when inline editing (create/rename handle their own keys via stopPropagation)
     if (isCreatingFolder || isRenamingFolder || isCreatingNote) return;
 
@@ -586,7 +524,7 @@ export default function CommandPalette() {
       }
 
       if (focusPane === "right") {
-        const totalItems = results.length + semanticResults.length;
+        const totalItems = results.length;
 
         if (e.key === "ArrowDown") {
           e.preventDefault();
@@ -596,10 +534,7 @@ export default function CommandPalette() {
           setSelectedNoteIndex((i) => Math.max(i - 1, 0));
         } else if (e.key === "Enter" && totalItems > 0) {
           e.preventDefault();
-          const item =
-            selectedNoteIndex < results.length
-              ? results[selectedNoteIndex]
-              : semanticResults[selectedNoteIndex - results.length];
+          const item = results[selectedNoteIndex];
           if (item) handleSelectResult(item);
         } else if (
           e.key === "Backspace" &&
@@ -617,49 +552,11 @@ export default function CommandPalette() {
           totalItems > 0
         ) {
           e.preventDefault();
-          const note =
-            selectedNoteIndex < results.length
-              ? results[selectedNoteIndex]
-              : semanticResults[selectedNoteIndex - results.length];
-          setShowMoveModal(note);
+          setShowMoveModal(results[selectedNoteIndex]);
         } else if (e.key === "n" && (e.metaKey || e.ctrlKey)) {
           e.preventDefault();
           setIsCreatingNote(true);
           setNewNoteTitle("");
-        } else if (
-          e.key === "l" &&
-          (e.metaKey || e.ctrlKey) &&
-          totalItems > 0
-        ) {
-          e.preventDefault();
-          const note =
-            selectedNoteIndex < results.length
-              ? results[selectedNoteIndex]
-              : null;
-          if (note) {
-            const toggleLock = async () => {
-              try {
-                if (note.locked) {
-                  const authed = await invoke<boolean>(
-                    "is_authenticated",
-                  ).catch(() => false);
-                  if (!authed) {
-                    const ok = await invoke<boolean>("authenticate");
-                    if (!ok) return;
-                  }
-                  await invoke("unlock_note", { path: note.path });
-                  setToast(t("palette.noteUnlocked"));
-                } else {
-                  await invoke("lock_note", { path: note.path });
-                  setToast(t("palette.noteLocked"));
-                }
-                await refreshAfterChange();
-              } catch (err) {
-                setToast(String(err));
-              }
-            };
-            toggleLock();
-          }
         }
       } else {
         // Left pane (folder sidebar)
@@ -717,7 +614,6 @@ export default function CommandPalette() {
   }, [
     focusPane,
     results,
-    semanticResults,
     selectedNoteIndex,
     selectedFolderIndex,
     selectedFolder,
@@ -725,7 +621,6 @@ export default function CommandPalette() {
     folderStats,
     confirmDelete,
     showMoveModal,
-    lockPromptNote,
     isCreatingFolder,
     isRenamingFolder,
     isCreatingNote,
@@ -847,7 +742,6 @@ export default function CommandPalette() {
 
         <NoteList
           results={results}
-          semanticResults={semanticResults}
           selectedIndex={selectedNoteIndex}
           query={query}
           isSearching={isSearching}
@@ -901,13 +795,8 @@ export default function CommandPalette() {
           </span>
           <span>
             <kbd className="px-1.5 py-0.5 bg-line rounded text-[9px]">⌘N</kbd>{" "}
-            
+
             {t("palette.new")}
-          </span>
-          <span>
-            <kbd className="px-1.5 py-0.5 bg-line rounded text-[9px]">⌘L</kbd>{" "}
-            
-            {t("palette.lock")}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -965,17 +854,6 @@ export default function CommandPalette() {
           folderColors={folderColors}
           onMove={(targetFolder) => handleMoveNote(showMoveModal, targetFolder)}
           onCancel={() => setShowMoveModal(null)}
-        />
-      )}
-
-      {lockPromptNote && (
-        <LockPrompt
-          onAuthenticated={() => {
-            const note = lockPromptNote;
-            setLockPromptNote(null);
-            openNote(note);
-          }}
-          onCancel={() => setLockPromptNote(null)}
         />
       )}
 

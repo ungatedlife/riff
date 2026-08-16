@@ -1,4 +1,4 @@
-import type { SearchResult, SemanticResult } from "@/types";
+import type { SearchResult } from "@/types";
 import { formatRelativeDate } from "@/utils/formatRelativeDate";
 import {
   normalizeNoteTitle,
@@ -9,7 +9,6 @@ import { useTranslation } from "@/hooks/useTranslation";
 
 interface NoteListProps {
   results: SearchResult[];
-  semanticResults: SemanticResult[];
   selectedIndex: number;
   query: string;
   isSearching: boolean;
@@ -44,7 +43,6 @@ function highlightSnippet(snippet: string, searchQuery: string) {
 
 export default function NoteList({
   results,
-  semanticResults,
   selectedIndex,
   query,
   isSearching,
@@ -64,12 +62,7 @@ export default function NoteList({
   const { t } = useTranslation();
   const hasQuery = query.trim().length > 0;
 
-  if (
-    results.length === 0 &&
-    semanticResults.length === 0 &&
-    hasQuery &&
-    !isSearching
-  ) {
+  if (results.length === 0 && hasQuery && !isSearching) {
     return (
       <div className="flex-1 flex items-center justify-center p-4">
         <span className="text-stone text-sm">
@@ -158,27 +151,7 @@ export default function NoteList({
             }`}
           >
             <div className="flex items-center gap-2">
-              {result.locked && (
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="shrink-0 text-stone"
-                >
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              )}
-              <p
-                className={`flex-1 text-[14px] font-medium leading-relaxed truncate ${
-                  result.locked ? "text-stone italic" : "text-ink"
-                }`}
-              >
+              <p className="flex-1 text-[14px] font-medium leading-relaxed truncate text-ink">
                 {displayTitle}
               </p>
               <span
@@ -190,7 +163,7 @@ export default function NoteList({
             <span className="text-[10px] text-stone font-mono">
               {formatRelativeDate(result.created)}
             </span>
-            {shouldShowSnippet && !result.locked && (
+            {shouldShowSnippet && (
               <p className="text-[12px] text-stone leading-relaxed mt-0.5">
                 {highlightSnippet(displaySnippet, query)}
               </p>
@@ -198,69 +171,6 @@ export default function NoteList({
           </button>
         );
       })}
-
-      {/* Semantic "Related" section */}
-      {semanticResults.length > 0 && (
-        <>
-          <div className="px-4 py-2 border-b border-line/50 bg-line/20">
-            <span className="text-[10px] font-semibold text-stone uppercase tracking-wider">
-              {t("palette.related")}
-            </span>
-          </div>
-          {semanticResults.map((result, index) => {
-            const globalIndex = results.length + index;
-            const displayTitle = normalizeNoteTitle(
-              result.title || result.filename || t("common.untitled"),
-            );
-            const displaySnippet = normalizeNoteSnippet(result.snippet);
-            const shouldShowSnippet =
-              hasQuery &&
-              displaySnippet.length > 0 &&
-              displaySnippet !== displayTitle;
-            const color = getFolderColor(result.folder, folderColors);
-            const isSelected = globalIndex === selectedIndex && focused;
-
-            return (
-              <button
-                key={result.path}
-                onClick={() => onSelectResult(result)}
-                onMouseEnter={() => onSetSelectedIndex(globalIndex)}
-                className={`w-full px-4 py-3 text-left border-b border-line/50 transition-colors ${
-                  isSelected ? "bg-coral/10" : "hover:bg-line/30"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <p className="flex-1 text-[14px] font-medium text-ink leading-relaxed truncate">
-                    {displayTitle}
-                  </p>
-                  <span
-                    className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold ${color.badgeBg} ${color.badgeText}`}
-                  >
-                    {result.folder}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-stone font-mono">
-                    {formatRelativeDate(result.created)}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-coral/10 text-coral">
-                    {t("palette.matchPercent", {
-                      percent: Math.round(result.similarity * 100),
-                    })}
-                  </span>
-                </div>
-                {shouldShowSnippet && (
-                  <p className="text-[12px] text-stone leading-relaxed mt-0.5">
-                    {displaySnippet.length > 100
-                      ? `${displaySnippet.slice(0, 100)}...`
-                      : displaySnippet}
-                  </p>
-                )}
-              </button>
-            );
-          })}
-        </>
-      )}
     </div>
   );
 }

@@ -10,10 +10,5 @@
     <!-- Global shortcuts via Accessibility API -->
     <key>com.apple.security.automation.apple-events</key>
     <true/>
-    <!-- Microphone access for on-device speech-to-text dictation.
-         Required under hardened runtime — without this the OS denies
-         mic access before TCC even prompts the user. -->
-    <key>com.apple.security.device.audio-input</key>
-    <true/>
 </dict>
 </plist>

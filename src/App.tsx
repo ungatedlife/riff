@@ -5,7 +5,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import PostIt from "./components/PostIt";
 import SettingsModal from "./components/SettingsModal";
 import CommandPalette from "./components/CommandPalette";
-import AnalyticsNotice from "./components/AnalyticsNotice";
 import { useTheme } from "./hooks/useTheme";
 import type { StickedNote, StikSettings } from "@/types";
 import { isMarkdownEffectivelyEmpty } from "@/utils/normalizeMarkdownForCopy";
@@ -53,7 +52,6 @@ export default function App() {
   const blurIgnoreUntilRef = useRef(0);
   const pendingBlurHideRef = useRef<number | null>(null);
   const skipNextBlurHideRef = useRef(false);
-  const [showAnalyticsNotice, setShowAnalyticsNotice] = useState(false);
   const windowInfo = getWindowInfo();
 
   const resolveFolder = useCallback(
@@ -166,15 +164,6 @@ export default function App() {
         skipNextBlurHideRef.current = false;
         return;
       }
-      // Dictation holds the window open: when the mic is active or
-      // the setup modal is mounted, a blur is expected (TCC prompt,
-      // download dialog, etc.) and must never hide the postit.
-      if (
-        (window as unknown as { __stikDictationHoldOpen?: boolean })
-          .__stikDictationHoldOpen
-      ) {
-        return;
-      }
       if (pendingBlurHideRef.current !== null) {
         window.clearTimeout(pendingBlurHideRef.current);
       }
@@ -183,12 +172,6 @@ export default function App() {
 
         const nowMs = Date.now();
         if (nowMs < blurIgnoreUntilRef.current) return;
-        if (
-          (window as unknown as { __stikDictationHoldOpen?: boolean })
-            .__stikDictationHoldOpen
-        ) {
-          return;
-        }
 
         const isFocused = await getCurrentWindow()
           .isFocused()
@@ -277,30 +260,6 @@ export default function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [windowInfo.type]);
-
-  // One-time notices for existing users
-  useEffect(() => {
-    if (windowInfo.type !== "postit") return;
-
-    invoke<StikSettings>("get_settings")
-      .then((s) => {
-        if (!s.analytics_notice_dismissed) {
-          setShowAnalyticsNotice(true);
-        }
-      })
-      .catch(() => {});
-  }, [windowInfo.type]);
-
-  const handleDismissAnalyticsNotice = useCallback(async () => {
-    try {
-      const settings = await invoke<StikSettings>("get_settings");
-      settings.analytics_notice_dismissed = true;
-      await invoke("save_settings", { settings });
-    } catch (error) {
-      console.error("Failed to dismiss analytics notice:", error);
-    }
-    setShowAnalyticsNotice(false);
-  }, []);
 
   const handleSave = useCallback(
     async (
@@ -411,18 +370,13 @@ export default function App() {
   }, []);
 
   return (
-    <>
-      <PostIt
-        folder={currentFolder}
-        onSave={handleSave}
-        onClose={handleClose}
-        onFolderChange={handleFolderChange}
-        onOpenSettings={handleOpenSettings}
-        onContentChange={handleContentChange}
-      />
-      {showAnalyticsNotice && (
-        <AnalyticsNotice onDismiss={handleDismissAnalyticsNotice} />
-      )}
-    </>
+    <PostIt
+      folder={currentFolder}
+      onSave={handleSave}
+      onClose={handleClose}
+      onFolderChange={handleFolderChange}
+      onOpenSettings={handleOpenSettings}
+      onContentChange={handleContentChange}
+    />
   );
 }

@@ -1,4 +1,4 @@
-use super::{git_share, versioning};
+use super::versioning;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -45,73 +45,6 @@ pub struct CustomThemeDefinition {
     pub colors: ThemeColors,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct GitSharingSettings {
-    pub enabled: bool,
-    pub shared_folder: String,
-    pub remote_url: String,
-    pub branch: String,
-    pub repository_layout: String,
-    pub sync_interval_seconds: u64,
-}
-
-impl Default for GitSharingSettings {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            shared_folder: "Inbox".to_string(),
-            remote_url: String::new(),
-            branch: "main".to_string(),
-            repository_layout: "folder_root".to_string(),
-            sync_interval_seconds: 300,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ICloudSettings {
-    pub enabled: bool,
-    pub migrated: bool,
-}
-
-impl Default for ICloudSettings {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            migrated: false,
-        }
-    }
-}
-
-pub use super::note_lock::NoteLockSettings;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct DictationSettings {
-    /// WhisperKit model variant id. None = not yet configured.
-    pub active_model: Option<String>,
-    /// ISO language code ("en", "it", …) or None for auto-detect.
-    pub active_language: Option<String>,
-    /// Master toggle for the dictation feature.
-    pub enabled: bool,
-}
-
-impl Default for DictationSettings {
-    fn default() -> Self {
-        Self {
-            active_model: None,
-            active_language: None,
-            enabled: true,
-        }
-    }
-}
-
-fn default_true() -> bool {
-    true
-}
-
 fn default_window_opacity() -> f64 {
     1.0
 }
@@ -129,10 +62,6 @@ pub struct StikSettings {
     pub shortcut_mappings: Vec<ShortcutMapping>,
     pub default_folder: String,
     #[serde(default)]
-    pub git_sharing: GitSharingSettings,
-    #[serde(default = "default_true")]
-    pub ai_features_enabled: bool,
-    #[serde(default)]
     pub vim_mode_enabled: bool,
     #[serde(default)]
     pub theme_mode: String,
@@ -144,10 +73,6 @@ pub struct StikSettings {
     pub folder_colors: HashMap<String, String>,
     #[serde(default)]
     pub system_shortcuts: HashMap<String, String>,
-    #[serde(default = "default_true")]
-    pub analytics_enabled: bool,
-    #[serde(default)]
-    pub analytics_notice_dismissed: bool,
     #[serde(default = "default_font_size")]
     pub font_size: u32,
     #[serde(default)]
@@ -158,8 +83,6 @@ pub struct StikSettings {
     pub custom_templates: Vec<CustomTemplate>,
     #[serde(default)]
     pub sidebar_position: String,
-    #[serde(default = "default_true")]
-    pub auto_update_enabled: bool,
     #[serde(default = "default_text_direction")]
     pub text_direction: String,
     #[serde(default)]
@@ -177,13 +100,7 @@ pub struct StikSettings {
     #[serde(default)]
     pub custom_fonts: Vec<CustomFontEntry>,
     #[serde(default)]
-    pub icloud: ICloudSettings,
-    #[serde(default)]
-    pub note_lock: NoteLockSettings,
-    #[serde(default)]
     pub use_directory_as_root: bool,
-    #[serde(default)]
-    pub dictation: DictationSettings,
     /// BCP-47 locale tag for the UI language ("en", "zh-CN").
     /// Empty string means "follow the system language".
     #[serde(default)]
@@ -217,22 +134,17 @@ impl Default for StikSettings {
                     enabled: true,
                 },
             ],
-            git_sharing: GitSharingSettings::default(),
-            ai_features_enabled: true,
             vim_mode_enabled: false,
             theme_mode: String::new(),
             notes_directory: String::new(),
             hide_dock_icon: false,
             folder_colors: HashMap::new(),
             system_shortcuts: default_system_shortcuts(),
-            analytics_enabled: true,
-            analytics_notice_dismissed: false,
             font_size: 14,
             viewing_window_size: None,
             viewing_window_position: None,
             custom_templates: vec![],
             sidebar_position: String::new(),
-            auto_update_enabled: true,
             text_direction: "auto".to_string(),
             hide_tray_icon: false,
             capture_window_size: None,
@@ -241,10 +153,7 @@ impl Default for StikSettings {
             font_family: None,
             window_opacity: 1.0,
             custom_fonts: vec![],
-            icloud: ICloudSettings::default(),
-            note_lock: NoteLockSettings::default(),
             use_directory_as_root: false,
-            dictation: DictationSettings::default(),
         }
     }
 }
@@ -256,15 +165,12 @@ pub fn default_system_shortcuts() -> HashMap<String, String> {
         ("settings".to_string(), "Cmd+Shift+Comma".to_string()),
         ("last_note".to_string(), "Cmd+Shift+L".to_string()),
         ("zen_mode".to_string(), "Cmd+Period".to_string()),
-        ("dictation".to_string(), "Cmd+Shift+D".to_string()),
-        ("voice_note".to_string(), "Cmd+Shift+V".to_string()),
-        ("clip_capture".to_string(), "Cmd+Shift+C".to_string()),
     ])
 }
 
 /// Actions that are in-app only (not registered as OS-level global shortcuts).
 pub fn local_only_actions() -> &'static [&'static str] {
-    &["zen_mode", "dictation"]
+    &["zen_mode"]
 }
 
 fn normalize_system_shortcuts(shortcuts: &mut HashMap<String, String>) {
@@ -356,7 +262,6 @@ pub fn get_settings() -> Result<StikSettings, String> {
 #[tauri::command]
 pub fn save_settings(settings: StikSettings) -> Result<bool, String> {
     save_settings_to_file(&settings)?;
-    git_share::notify_force_sync();
     Ok(true)
 }
 
