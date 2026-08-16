@@ -1,4 +1,4 @@
-import { t, getLocale } from "@/i18n";
+import { t } from "@/i18n";
 
 /**
  * Convert a Stik filename-derived date string (YYYYMMDD-HHMMSS) into a
@@ -31,7 +31,7 @@ export function formatRelativeDate(created: string): string {
   // Within last 7 days — show day name
   const diffDays = Math.floor(diffMs / 86_400_000);
   if (diffDays < 7) {
-    return date.toLocaleDateString(getLocale(), { weekday: "long" });
+    return date.toLocaleDateString("en", { weekday: "long" });
   }
 
   // Older — DD/MM/YY

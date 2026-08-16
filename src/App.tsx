@@ -8,7 +8,6 @@ import CommandPalette from "./components/CommandPalette";
 import { useTheme } from "./hooks/useTheme";
 import { isMarkdownEffectivelyEmpty } from "@/utils/normalizeMarkdownForCopy";
 import { shouldHideCaptureOnBlur } from "@/utils/blurAutoHide";
-import { useLanguageSync } from "@/hooks/useTranslation";
 
 type WindowType = "main" | "settings" | "command-palette";
 
@@ -33,7 +32,6 @@ function getWindowInfo(): { type: WindowType } {
 
 export default function App() {
   useTheme();
-  useLanguageSync();
   const contentRef = useRef("");
   const blurIgnoreUntilRef = useRef(0);
   const pendingBlurHideRef = useRef<number | null>(null);

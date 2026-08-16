@@ -4,12 +4,10 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import ShortcutRecorder from "./ShortcutRecorder";
 import type {
   CustomFontEntry,
-  CustomTemplate,
   CustomThemeDefinition,
   StikSettings,
   ThemeColors,
 } from "@/types";
-import { BUILTIN_COMMAND_NAMES } from "@/extensions/cm-slash-commands";
 import ConfirmDialog from "./ConfirmDialog";
 import {
   SYSTEM_SHORTCUT_ACTIONS,
@@ -19,7 +17,7 @@ import {
 } from "@/utils/systemShortcuts";
 import { hexToRgb, rgbToHex } from "@/utils/color";
 import { useTranslation } from "@/hooks/useTranslation";
-import { LOCALES, t as tGlobal, type TranslationKey } from "@/i18n";
+import { type TranslationKey } from "@/i18n";
 import { BUILTIN_THEMES, generateThemeId, type BuiltinTheme } from "@/themes";
 import {
   FONTS,
@@ -104,18 +102,14 @@ export function Dropdown({
   );
 }
 
-export type SettingsTab =
-  | "appearance"
-  | "shortcuts"
-  | "folders"
-  | "editor"
-  | "templates";
+export type SettingsTab = "appearance" | "shortcuts" | "publishing" | "about";
 
 interface SettingsContentProps {
   activeTab: SettingsTab;
   settings: StikSettings;
   onSettingsChange: (settings: StikSettings) => void;
   resolvedNotesDir: string;
+  appVersion?: string;
 }
 
 function SettingsToast({
@@ -629,33 +623,6 @@ function AppearanceSection({
   return (
     <>
       <div className="space-y-4">
-        <div className="p-4 bg-line/30 rounded-xl border border-line/50">
-          <p className="text-[13px] text-ink font-medium mb-1">
-            {t("settings.language.title")}
-          </p>
-          <p className="text-[12px] text-stone leading-relaxed mb-3">
-            {t("settings.language.description")}
-          </p>
-          <div className="max-w-[240px]">
-            <Dropdown
-              value={settings.language ?? ""}
-              options={[
-                { value: "", label: t("settings.language.system") },
-                ...LOCALES.map((l) => ({
-                  value: l.id,
-                  label:
-                    l.nativeLabel === l.englishLabel
-                      ? l.nativeLabel
-                      : `${l.nativeLabel} (${l.englishLabel})`,
-                })),
-              ]}
-              onChange={(value) =>
-                onSettingsChange({ ...settings, language: value })
-              }
-            />
-          </div>
-        </div>
-
         <p className="text-[12px] text-stone">
           {t("settings.theme.chooseIntro")}
         </p>
@@ -990,318 +957,12 @@ function AppearanceSection({
   );
 }
 
-const TEMPLATE_NAME_RE = /^[a-z][a-z0-9-]*$/;
-const TEMPLATE_NAME_MIN = 2;
-const TEMPLATE_NAME_MAX = 20;
-const TEMPLATE_BODY_MAX = 5000;
-
-function validateTemplateName(
-  name: string,
-  existingNames: string[],
-  editingIndex: number | null,
-): string | null {
-  if (name.length < TEMPLATE_NAME_MIN)
-    return tGlobal("settings.template.nameTooShort", { min: TEMPLATE_NAME_MIN });
-  if (name.length > TEMPLATE_NAME_MAX)
-    return tGlobal("settings.template.nameTooLong", { max: TEMPLATE_NAME_MAX });
-  if (!TEMPLATE_NAME_RE.test(name))
-    return tGlobal("settings.template.nameRule");
-  if (BUILTIN_COMMAND_NAMES.includes(name))
-    return tGlobal("settings.template.nameBuiltin", { name });
-  const dupeIdx = existingNames.findIndex((n) => n === name);
-  if (dupeIdx >= 0 && dupeIdx !== editingIndex)
-    return tGlobal("settings.template.nameTaken");
-  return null;
-}
-
-function TemplatesSection({
-  templates,
-  onChange,
-}: {
-  templates: CustomTemplate[];
-  onChange: (templates: CustomTemplate[]) => void;
-}) {
-  const { t } = useTranslation();
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editBody, setEditBody] = useState("");
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [bodyError, setBodyError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState<number | null>(null);
-  const nameInputRef = useRef<HTMLInputElement>(null);
-
-  const startAdd = () => {
-    setEditingIndex(-1); // -1 = new template
-    setEditName("");
-    setEditBody("");
-    setNameError(null);
-    setBodyError(null);
-    setTimeout(() => nameInputRef.current?.focus(), 50);
-  };
-
-  const startEdit = (index: number) => {
-    setEditingIndex(index);
-    setEditName(templates[index].name);
-    setEditBody(templates[index].body);
-    setNameError(null);
-    setBodyError(null);
-    setTimeout(() => nameInputRef.current?.focus(), 50);
-  };
-
-  const cancelEdit = () => {
-    setEditingIndex(null);
-    setEditName("");
-    setEditBody("");
-    setNameError(null);
-    setBodyError(null);
-  };
-
-  const saveEdit = () => {
-    const trimmedName = editName.trim();
-    const trimmedBody = editBody.trim();
-
-    const existingNames = templates.map((t) => t.name);
-    const nErr = validateTemplateName(
-      trimmedName,
-      existingNames,
-      editingIndex === -1 ? null : editingIndex,
-    );
-    const bErr = !trimmedBody
-      ? t("settings.template.bodyEmpty")
-      : trimmedBody.length > TEMPLATE_BODY_MAX
-        ? `Body must be at most ${TEMPLATE_BODY_MAX} characters`
-        : null;
-
-    setNameError(nErr);
-    setBodyError(bErr);
-    if (nErr || bErr) return;
-
-    const entry: CustomTemplate = { name: trimmedName, body: trimmedBody };
-    const isNew = editingIndex === -1;
-    if (isNew) {
-      onChange([...templates, entry]);
-    } else if (editingIndex !== null) {
-      const updated = [...templates];
-      updated[editingIndex] = entry;
-      onChange(updated);
-    }
-    cancelEdit();
-    setToast(
-      isNew
-        ? `Template /${trimmedName} added`
-        : `Template /${trimmedName} updated`,
-    );
-  };
-
-  const confirmDelete = (index: number) => {
-    const name = templates[index].name;
-    onChange(templates.filter((_, i) => i !== index));
-    if (editingIndex === index) cancelEdit();
-    setConfirmingDelete(null);
-    setToast(`Template /${name} deleted`);
-  };
-
-  return (
-    <>
-      <div className="space-y-4">
-        <p className="text-[12px] text-stone">
-          {t("settings.template.intro")}
-        </p>
-
-        {/* Existing templates */}
-        {templates.length > 0 && (
-          <div className="space-y-2">
-            {templates.map((tpl, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 px-3 py-2.5 bg-line/30 rounded-xl border border-line/50"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] text-ink font-medium">/{tpl.name}</p>
-                  <p className="text-[11px] text-stone truncate">
-                    {tpl.body.split("\n")[0].slice(0, 60)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => startEdit(i)}
-                  className="w-6 h-6 shrink-0 flex items-center justify-center rounded-md hover:bg-line text-stone hover:text-ink transition-colors"
-                  title={t("settings.template.edit")}
-                >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(i)}
-                  className="w-6 h-6 shrink-0 flex items-center justify-center rounded-md hover:bg-coral-light text-stone hover:text-coral transition-colors"
-                  title={t("settings.template.delete")}
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 6h18" />
-                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Edit / Add form */}
-        {editingIndex !== null ? (
-          <div className="p-4 bg-line/30 rounded-xl border border-line/50 space-y-3">
-            <div>
-              <label
-                className="block text-[12px] text-stone mb-1.5"
-                htmlFor="template-name-input"
-              >
-                {t("settings.template.commandName")}
-              </label>
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] text-stone">/</span>
-                <input
-                  ref={nameInputRef}
-                  id="template-name-input"
-                  type="text"
-                  value={editName}
-                  onChange={(e) => {
-                    setEditName(e.target.value);
-                    setNameError(null);
-                  }}
-                  placeholder="my-template"
-                  maxLength={TEMPLATE_NAME_MAX}
-                  className="flex-1 px-3 py-2 bg-bg border border-line rounded-lg text-[13px] text-ink placeholder:text-stone/70 focus:outline-none focus:border-coral/50"
-                />
-              </div>
-              {nameError && (
-                <p className="mt-1 text-[11px] text-coral">{nameError}</p>
-              )}
-            </div>
-
-            <div>
-              <label
-                className="block text-[12px] text-stone mb-1.5"
-                htmlFor="template-body-input"
-              >
-                {t("settings.template.body")}
-              </label>
-              <textarea
-                id="template-body-input"
-                value={editBody}
-                onChange={(e) => {
-                  setEditBody(e.target.value);
-                  setBodyError(null);
-                }}
-                placeholder={"# My Template\n\nContent here...\n\n{{cursor}}"}
-                rows={6}
-                maxLength={TEMPLATE_BODY_MAX}
-                className="w-full px-3 py-2 bg-bg border border-line rounded-lg text-[13px] text-ink font-mono placeholder:text-stone/70 focus:outline-none focus:border-coral/50 resize-y"
-              />
-              {bodyError && (
-                <p className="mt-1 text-[11px] text-coral">{bodyError}</p>
-              )}
-            </div>
-
-            <div className="p-2.5 bg-bg/50 rounded-lg border border-line/50">
-              <p className="text-[11px] text-stone mb-1 font-medium">
-                {t("settings.template.placeholders")}
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  "{{date}}",
-                  "{{time}}",
-                  "{{day}}",
-                  "{{datetime}}",
-                  "{{isodate}}",
-                  "{{cursor}}",
-                ].map((ph) => (
-                  <code
-                    key={ph}
-                    className="px-1.5 py-0.5 text-[10px] rounded bg-line/50 text-ink font-mono"
-                  >
-                    {ph}
-                  </code>
-                ))}
-              </div>
-              <p className="mt-1.5 text-[10px] text-stone">
-                <span className="text-ink">{"{{cursor}}"}</span>{" "}
-                {t("settings.template.cursorHint")}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={saveEdit}
-                className="px-3 py-2 text-[12px] font-medium text-white bg-coral rounded-lg hover:bg-coral/90 transition-colors"
-              >
-                {editingIndex === -1 ? "Add" : t("common.save")}
-              </button>
-              <button
-                type="button"
-                onClick={cancelEdit}
-                className="px-3 py-2 text-[12px] text-stone hover:text-ink rounded-lg hover:bg-line transition-colors"
-              >
-                {t("common.cancelAction")}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={startAdd}
-            className="w-full px-4 py-3 text-[13px] text-coral hover:bg-coral-light rounded-xl transition-colors flex items-center justify-center gap-2 border border-dashed border-coral/30 hover:border-coral/50"
-          >
-            <span className="text-lg">+</span>
-            <span>{t("settings.template.add")}</span>
-          </button>
-        )}
-
-        <div className="p-3 bg-coral-light/40 border border-coral/20 rounded-xl">
-          <p className="text-[12px] text-stone leading-relaxed">
-            {t("settings.template.badgeHint")}
-          </p>
-        </div>
-      </div>
-      {confirmingDelete !== null && (
-        <ConfirmDialog
-          title={t("settings.template.deleteConfirm")}
-          description={`This will remove /${templates[confirmingDelete]?.name} from your slash commands.`}
-          onConfirm={() => confirmDelete(confirmingDelete)}
-          onCancel={() => setConfirmingDelete(null)}
-        />
-      )}
-      {toast && <SettingsToast message={toast} onDone={() => setToast(null)} />}
-    </>
-  );
-}
-
 export default function SettingsContent({
   activeTab,
   settings,
   onSettingsChange,
   resolvedNotesDir,
+  appVersion,
 }: SettingsContentProps) {
   const { t } = useTranslation();
   const notesDir = settings.drafts_dir || resolvedNotesDir || "~/Documents/Riff";
@@ -1309,10 +970,132 @@ export default function SettingsContent({
   return (
     <div>
       {activeTab === "appearance" && (
-        <AppearanceSection
-          settings={settings}
-          onSettingsChange={onSettingsChange}
-        />
+        <div className="space-y-4">
+          <AppearanceSection
+            settings={settings}
+            onSettingsChange={onSettingsChange}
+          />
+
+          <div className="flex items-center justify-between gap-3 p-4 bg-line/30 rounded-xl border border-line/50">
+            <div>
+              <p className="text-[13px] text-ink font-medium">{t("settings.fontSize")}</p>
+              <p className="mt-1 text-[12px] text-stone leading-relaxed">
+                {t("settings.fontSize.describe")}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() =>
+                  onSettingsChange({
+                    ...settings,
+                    font_size: Math.max((settings.font_size ?? 16) - 1, 12),
+                  })
+                }
+                disabled={(settings.font_size ?? 16) <= 12}
+                className="w-7 h-7 flex items-center justify-center rounded-lg border border-line text-[14px] text-ink hover:bg-line/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                -
+              </button>
+              <span className="w-8 text-center text-[13px] font-mono text-ink tabular-nums">
+                {settings.font_size ?? 16}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  onSettingsChange({
+                    ...settings,
+                    font_size: Math.min((settings.font_size ?? 16) + 1, 48),
+                  })
+                }
+                disabled={(settings.font_size ?? 16) >= 48}
+                className="w-7 h-7 flex items-center justify-center rounded-lg border border-line text-[14px] text-ink hover:bg-line/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 bg-line/30 rounded-xl border border-line/50">
+            <p className="text-[13px] text-ink font-medium mb-1">
+              {t("settings.textDirection.title")}
+            </p>
+            <p className="text-[12px] text-stone leading-relaxed mb-3">
+              {t("settings.textDirection.describe")}
+            </p>
+            <div className="max-w-[240px]">
+              <Dropdown
+                value={settings.text_direction || "auto"}
+                options={[
+                  { value: "auto", label: t("settings.textDirection.auto") },
+                  { value: "ltr", label: t("settings.textDirection.ltr") },
+                  { value: "rtl", label: t("settings.textDirection.rtl") },
+                ]}
+                onChange={(value) =>
+                  onSettingsChange({ ...settings, text_direction: value })
+                }
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center justify-between gap-3 p-4 bg-line/30 rounded-xl border border-line/50">
+            <div>
+              <p className="text-[13px] text-ink font-medium">{t("settings.hideDockIcon")}</p>
+              <p className="mt-1 text-[12px] text-stone leading-relaxed">
+                {t("settings.hideDockIcon.describe")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                onSettingsChange({
+                  ...settings,
+                  hide_dock_icon: !settings.hide_dock_icon,
+                })
+              }
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                settings.hide_dock_icon ? "bg-coral" : "bg-line"
+              }`}
+              title={t("settings.hideDockIcon.toggle")}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white transition-transform pointer-events-none ${
+                  settings.hide_dock_icon ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </label>
+
+          <label className="flex items-center justify-between gap-3 p-4 bg-line/30 rounded-xl border border-line/50">
+            <div>
+              <p className="text-[13px] text-ink font-medium">
+                {t("settings.hideTrayIcon.title")}
+              </p>
+              <p className="mt-1 text-[12px] text-stone leading-relaxed">
+                {t("settings.hideTrayIcon.describe")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                onSettingsChange({
+                  ...settings,
+                  hide_tray_icon: !settings.hide_tray_icon,
+                })
+              }
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                settings.hide_tray_icon ? "bg-coral" : "bg-line"
+              }`}
+              title={t("settings.hideTrayIcon.toggle")}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white transition-transform pointer-events-none ${
+                  settings.hide_tray_icon ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </label>
+        </div>
       )}
 
       {activeTab === "shortcuts" && (
@@ -1422,7 +1205,7 @@ export default function SettingsContent({
         </div>
       )}
 
-      {activeTab === "folders" && (
+      {activeTab === "publishing" && (
         <div className="space-y-4">
           <div>
             <p className="text-[12px] text-stone mb-1.5">{t("settings.notesDirectory")}</p>
@@ -1473,204 +1256,26 @@ export default function SettingsContent({
         </div>
       )}
 
-      {activeTab === "editor" && (
+      {activeTab === "about" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3 p-4 bg-line/30 rounded-xl border border-line/50">
-            <div>
-              <p className="text-[13px] text-ink font-medium">{t("settings.fontSize")}</p>
-              <p className="mt-1 text-[12px] text-stone leading-relaxed">
-                {t("settings.fontSize.describe")}
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() =>
-                  onSettingsChange({
-                    ...settings,
-                    font_size: Math.max((settings.font_size ?? 14) - 1, 12),
-                  })
-                }
-                disabled={(settings.font_size ?? 14) <= 12}
-                className="w-7 h-7 flex items-center justify-center rounded-lg border border-line text-[14px] text-ink hover:bg-line/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                -
-              </button>
-              <span className="w-8 text-center text-[13px] font-mono text-ink tabular-nums">
-                {settings.font_size ?? 14}
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  onSettingsChange({
-                    ...settings,
-                    font_size: Math.min((settings.font_size ?? 14) + 1, 48),
-                  })
-                }
-                disabled={(settings.font_size ?? 14) >= 48}
-                className="w-7 h-7 flex items-center justify-center rounded-lg border border-line text-[14px] text-ink hover:bg-line/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          <label className="flex items-center justify-between gap-3 p-4 bg-line/30 rounded-xl border border-line/50">
-            <div>
-              <p className="text-[13px] text-ink font-medium">{t("settings.vimMode")}</p>
-              <p className="mt-1 text-[12px] text-stone leading-relaxed">
-                {t("settings.vimMode.describe")}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                onSettingsChange({
-                  ...settings,
-                  vim_mode_enabled: !settings.vim_mode_enabled,
-                })
-              }
-              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-                settings.vim_mode_enabled ? "bg-coral" : "bg-line"
-              }`}
-              title={t("settings.vimMode.toggle")}
-            >
-              <span
-                className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white transition-transform pointer-events-none ${
-                  settings.vim_mode_enabled ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </label>
-
           <div className="p-4 bg-line/30 rounded-xl border border-line/50">
-            <p className="text-[13px] text-ink font-medium mb-1">
-              {t("settings.textDirection.title")}
+            <p className="text-[15px] text-ink font-semibold">Riff</p>
+            <p className="mt-1 text-[12px] text-stone leading-relaxed">
+              {t("settings.about.tagline")}
             </p>
-            <p className="text-[12px] text-stone leading-relaxed mb-3">
-              {t("settings.textDirection.describe")}
-            </p>
-            <div className="max-w-[240px]">
-              <Dropdown
-                value={settings.text_direction || "auto"}
-                options={[
-                  { value: "auto", label: t("settings.textDirection.auto") },
-                  { value: "ltr", label: t("settings.textDirection.ltr") },
-                  { value: "rtl", label: t("settings.textDirection.rtl") },
-                ]}
-                onChange={(value) =>
-                  onSettingsChange({ ...settings, text_direction: value })
-                }
-              />
-            </div>
+            {appVersion && (
+              <p className="mt-2 text-[11px] font-mono text-stone">
+                v{appVersion}
+              </p>
+            )}
           </div>
-
-          <label className="flex items-center justify-between gap-3 p-4 bg-line/30 rounded-xl border border-line/50">
-            <div>
-              <p className="text-[13px] text-ink font-medium">{t("settings.hideDockIcon")}</p>
-              <p className="mt-1 text-[12px] text-stone leading-relaxed">
-                {t("settings.hideDockIcon.describe")}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                onSettingsChange({
-                  ...settings,
-                  hide_dock_icon: !settings.hide_dock_icon,
-                })
-              }
-              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-                settings.hide_dock_icon ? "bg-coral" : "bg-line"
-              }`}
-              title={t("settings.hideDockIcon.toggle")}
-            >
-              <span
-                className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white transition-transform pointer-events-none ${
-                  settings.hide_dock_icon ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </label>
-
-          <label className="flex items-center justify-between gap-3 p-4 bg-line/30 rounded-xl border border-line/50">
-            <div>
-              <p className="text-[13px] text-ink font-medium">
-                {t("settings.hideTrayIcon.title")}
-              </p>
-              <p className="mt-1 text-[12px] text-stone leading-relaxed">
-                {t("settings.hideTrayIcon.describe")}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                onSettingsChange({
-                  ...settings,
-                  hide_tray_icon: !settings.hide_tray_icon,
-                })
-              }
-              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-                settings.hide_tray_icon ? "bg-coral" : "bg-line"
-              }`}
-              title={t("settings.hideTrayIcon.toggle")}
-            >
-              <span
-                className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white transition-transform pointer-events-none ${
-                  settings.hide_tray_icon ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </label>
-
-          <div className="p-4 bg-line/30 rounded-xl border border-line/50 space-y-2">
-            <p className="text-[13px] text-ink font-medium">{t("settings.vim.quickReference")}</p>
-            <div className="text-[12px] text-stone leading-relaxed space-y-1">
-              <p>
-                <span className="text-ink font-medium">{t("settings.vim.movement")}</span> — h j k
-                l, w b (word), 0 $ (line), gg G (document)
-              </p>
-              <p>
-                <span className="text-ink font-medium">{t("settings.vim.insert")}</span> — i
-                (before), a (after), A (end of line), o O (new line)
-              </p>
-              <p>
-                <span className="text-ink font-medium">{t("settings.vim.edit")}</span> — x dd cc cw
-                C, yy p, diw ciw, ci/di + &quot; &apos; ( {"{"}
-              </p>
-              <p>
-                <span className="text-ink font-medium">{t("settings.vim.visual")}</span> — v
-                (chars), V (lines), d x (delete), y (yank), c (change)
-              </p>
-              <p>
-                <span className="text-ink font-medium">{t("settings.vim.undo")}</span> — u, Ctrl+r
-                (redo), . (repeat)
-              </p>
-              <p>
-                <span className="text-ink font-medium">{t("settings.vim.commands")}</span> — :wq
-                (save &amp; close), :q! (discard &amp; close)
-              </p>
-            </div>
-          </div>
-
-          <div className="p-3 bg-coral-light/40 border border-coral/20 rounded-xl space-y-1">
-            <p className="text-[12px] font-semibold text-ink">{t("settings.vim.howToClose")}</p>
+          <div className="p-3 bg-coral-light/40 border border-coral/20 rounded-xl">
             <p className="text-[12px] text-stone leading-relaxed">
-              {t("settings.vim.commandBar")}
+              {t("settings.about.credit")}
             </p>
           </div>
         </div>
       )}
-
-      {activeTab === "templates" && (
-        <TemplatesSection
-          templates={settings.custom_templates ?? []}
-          onChange={(templates) =>
-            onSettingsChange({ ...settings, custom_templates: templates })
-          }
-        />
-      )}
-
     </div>
   );
 }

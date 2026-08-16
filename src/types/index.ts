@@ -1,8 +1,3 @@
-export interface CustomTemplate {
-  name: string;
-  body: string;
-}
-
 export interface CustomFontEntry {
   name: string; // font-family CSS name (derived from filename)
   path: string; // absolute path to the font file on disk
@@ -28,14 +23,12 @@ export interface CustomThemeDefinition {
 }
 
 export interface StikSettings {
-  vim_mode_enabled: boolean;
   theme_mode: string;
   /** Absolute path of the drafts directory. Empty/undefined = ~/Documents/Riff. */
   drafts_dir?: string | null;
   hide_dock_icon: boolean;
   system_shortcuts: Record<string, string>;
   font_size: number;
-  custom_templates: CustomTemplate[];
   text_direction: string;
   hide_tray_icon: boolean;
   active_theme: string;
@@ -43,8 +36,6 @@ export interface StikSettings {
   font_family?: string | null; // null = system default
   window_opacity?: number; // 0.2–1.0, default 1.0
   custom_fonts?: CustomFontEntry[];
-  /// BCP-47 locale tag for the UI language. "" = follow system language.
-  language?: string;
 }
 
 export interface NoteInfo {

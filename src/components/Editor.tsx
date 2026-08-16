@@ -40,18 +40,8 @@ import {
   wikiLinkClickHandler,
   wikiLinkCompletionSource,
 } from "@/extensions/cm-wiki-link";
-import { slashCommandCompletionSource } from "@/extensions/cm-slash-commands";
 import { blockWidgetPlugin } from "@/extensions/cm-block-widgets";
 import { bidiSupport } from "@/extensions/cm-bidi";
-import {
-  createVimExtension,
-  handleVimArrowInVisualMode,
-  setupVimModeListener,
-  registerVimCommands,
-  setVimModeOnView,
-  vimCompartment,
-  type VimMode,
-} from "@/extensions/cm-vim";
 import { highlightExtension } from "@/extensions/cm-highlight";
 import { taskCheckboxPlugin, taskCheckboxHandler } from "@/extensions/cm-task-toggle";
 import { hideMarkersPlugin, autoCloseMarkup } from "@/extensions/cm-hide-markers";
@@ -66,24 +56,17 @@ import {
   shouldShowCmdLinkCursor,
 } from "@/utils/externalLinkHitTest";
 import { markdownToHtml, markdownToPlainText } from "@/utils/markdownToHtml";
-import { createVimCommandCallbacks } from "@/utils/vimCommandBridge";
 import FormattingToolbar from "@/components/FormattingToolbar";
 import LinkPopover from "@/components/LinkPopover";
 import type { SearchResult } from "@/types";
 import { useTranslation } from "@/hooks/useTranslation";
 
-export { type VimMode } from "@/extensions/cm-vim";
-
 interface EditorProps {
   onChange: (content: string) => void;
   placeholder?: string;
   initialContent?: string;
-  vimEnabled?: boolean;
   showFormatToolbar?: boolean;
   textDirection?: "auto" | "ltr" | "rtl";
-  onVimModeChange?: (mode: VimMode) => void;
-  onVimSaveAndClose?: () => void;
-  onVimCloseWithoutSaving?: () => void;
   onImagePaste?: (file: File) => Promise<string | null>;
   onImageDropPath?: (path: string) => Promise<string | null>;
   onWikiLinkClick?: (slug: string, path: string) => void;
@@ -99,7 +82,6 @@ export interface EditorRef {
   setCursor: (head: number, anchor: number) => void;
   getHTML: () => string;
   getText: () => string;
-  setVimMode: (mode: VimMode) => void;
   getView: () => EditorView | null;
   getFormatState: () => FormatState;
 }
@@ -116,12 +98,8 @@ const Editor = forwardRef<EditorRef, EditorProps>(
       onChange,
       placeholder,
       initialContent,
-      vimEnabled,
       showFormatToolbar,
       textDirection = "auto",
-      onVimModeChange,
-      onVimSaveAndClose,
-      onVimCloseWithoutSaving,
       onImagePaste,
       onImageDropPath,
       onWikiLinkClick,
@@ -145,12 +123,6 @@ const Editor = forwardRef<EditorRef, EditorProps>(
     // Stable refs for callbacks to avoid recreating extensions
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
-    const onVimModeChangeRef = useRef(onVimModeChange);
-    onVimModeChangeRef.current = onVimModeChange;
-    const onVimSaveAndCloseRef = useRef(onVimSaveAndClose);
-    onVimSaveAndCloseRef.current = onVimSaveAndClose;
-    const onVimCloseWithoutSavingRef = useRef(onVimCloseWithoutSaving);
-    onVimCloseWithoutSavingRef.current = onVimCloseWithoutSaving;
     const onImagePasteRef = useRef(onImagePaste);
     onImagePasteRef.current = onImagePaste;
     const onImageDropPathRef = useRef(onImageDropPath);
@@ -172,22 +144,6 @@ const Editor = forwardRef<EditorRef, EditorProps>(
       if (!containerRef.current) return;
 
       const formatKeybindings = keymap.of([
-        {
-          key: "ArrowLeft",
-          run: (view) => handleVimArrowInVisualMode(view, "ArrowLeft"),
-        },
-        {
-          key: "ArrowRight",
-          run: (view) => handleVimArrowInVisualMode(view, "ArrowRight"),
-        },
-        {
-          key: "ArrowUp",
-          run: (view) => handleVimArrowInVisualMode(view, "ArrowUp"),
-        },
-        {
-          key: "ArrowDown",
-          run: (view) => handleVimArrowInVisualMode(view, "ArrowDown"),
-        },
         {
           key: "Escape",
           run: (view) => {
@@ -439,7 +395,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         },
       });
 
-      // Autocomplete: wiki-links ([[) + slash commands (/)
+      // Autocomplete: wiki-links ([[)
       const combinedAutocomplete = autocompletion({
         override: [
           wikiLinkCompletionSource(async (query: string) => {
@@ -453,7 +409,6 @@ const Editor = forwardRef<EditorRef, EditorProps>(
               return [];
             }
           }),
-          slashCommandCompletionSource,
         ],
         activateOnTyping: true,
       });
@@ -521,9 +476,6 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         }),
         stikEditorTheme,
         stikHighlightStyle,
-        // Required for Vim visual mode highlight:
-        // @replit/codemirror-vim makes native ::selection transparent.
-        // drawSelection renders .cm-selectionBackground instead.
         drawSelection(),
         placeholderCompartment.of(cmPlaceholder(placeholderText)),
         search(),
@@ -548,13 +500,6 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         EditorView.contentAttributes.of({ class: "stik-editor" }),
       ];
 
-      // Add vim mode if enabled
-      if (vimEnabled) {
-        extensions.push(vimCompartment.of(createVimExtension()));
-      } else {
-        extensions.push(vimCompartment.of([]));
-      }
-
       const state = EditorState.create({
         doc: initialContent || "",
         extensions,
@@ -566,25 +511,6 @@ const Editor = forwardRef<EditorRef, EditorProps>(
       });
 
       viewRef.current = view;
-
-      // Setup vim mode listener after view is created
-      if (vimEnabled) {
-        setupVimModeListener(view, (mode) => {
-          if (mode === "normal") {
-            // Check if the vim status shows ":" command
-            // The vim plugin handles command mode internally
-          }
-          onVimModeChangeRef.current?.(mode);
-        });
-
-        registerVimCommands(
-          createVimCommandCallbacks({
-            onSaveAndClose: () => onVimSaveAndCloseRef.current?.(),
-            onCloseWithoutSaving: () => onVimCloseWithoutSavingRef.current?.(),
-            onModeChange: (mode: VimMode) => onVimModeChangeRef.current?.(mode),
-          })
-        );
-      }
 
       return () => {
         view.destroy();
@@ -605,7 +531,6 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         ),
       });
     }, [placeholderText]);
-    // Parent uses key={vimEnabled} to force remount when vim toggled.
 
     // Tauri native drag-drop fallback (WebKit dataTransfer can be empty for OS-level drops)
     useEffect(() => {
@@ -692,17 +617,11 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         return markdownToHtml(text);
       },
       getText: () => viewRef.current?.state.doc.toString() || "",
-      setVimMode: (mode: VimMode) => {
-        if (viewRef.current && vimEnabled) {
-          setVimModeOnView(viewRef.current, mode);
-          onVimModeChangeRef.current?.(mode);
-        }
-      },
       getView: () => viewRef.current,
       getFormatState: () => formatStateRef.current,
     }));
 
-    const toolbarVisible = showFormatToolbar && !vimEnabled;
+    const toolbarVisible = showFormatToolbar;
 
     return (
       <div className={`h-full relative${toolbarVisible ? " has-formatting-toolbar" : ""}`}>

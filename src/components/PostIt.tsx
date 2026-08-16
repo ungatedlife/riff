@@ -1,28 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { flushSync } from "react-dom";
-import {
-  completionStatus,
-  startCompletion,
-  closeCompletion,
-} from "@codemirror/autocomplete";
+import { completionStatus } from "@codemirror/autocomplete";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import Editor, { type EditorRef } from "./Editor";
 import type { StikSettings } from "@/types";
-import type { VimMode } from "@/extensions/cm-vim";
-import {
-  getSlashCommandNames,
-  setCustomTemplates,
-} from "@/extensions/cm-slash-commands";
 import {
   isMarkdownEffectivelyEmpty,
   normalizeMarkdownForCopy,
 } from "@/utils/normalizeMarkdownForCopy";
 import { shouldSaveOnGlobalEscape } from "@/utils/captureEscape";
-import { isCaptureSlashQuery } from "@/utils/slashQuery";
 import { markdownToPlainText } from "@/utils/markdownToHtml";
-import { shouldOpenVimCommandBar } from "@/utils/vimCommandKey";
 import {
   resolveImagePaths,
   unresolveImagePaths,
@@ -91,8 +80,8 @@ export default function PostIt({
   const [isCopying, setIsCopying] = useState(false);
   const [isCopyMenuOpen, setIsCopyMenuOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [vimEnabled, setVimEnabled] = useState<boolean | null>(null); // null = loading
-  const [fontSize, setFontSize] = useState(14);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [fontSize, setFontSize] = useState(16);
   const [fontFamily, setFontFamily] = useState<string | null>(null);
   const [windowOpacity, setWindowOpacity] = useState(1.0);
   const [customFonts, setCustomFonts] = useState<
@@ -101,9 +90,6 @@ export default function PostIt({
   const [systemShortcuts, setSystemShortcuts] = useState<
     Record<string, string>
   >({});
-  const [vimMode, setVimMode] = useState<VimMode>("normal");
-  const [vimCommand, setVimCommand] = useState("");
-  const [vimCommandError, setVimCommandError] = useState("");
   const [textDirection, setTextDirection] = useState<"auto" | "ltr" | "rtl">(
     "auto",
   );
@@ -115,7 +101,6 @@ export default function PostIt({
       return true;
     }
   });
-  const commandInputRef = useRef<HTMLInputElement | null>(null);
   const editorRef = useRef<EditorRef | null>(null);
   const copyMenuRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef(content);
@@ -234,27 +219,26 @@ export default function PostIt({
   useEffect(() => {
     invoke<StikSettings>("get_settings")
       .then((s) => {
-        setVimEnabled(s.vim_mode_enabled);
-        setFontSize(s.font_size ?? 14);
+        setFontSize(s.font_size ?? 16);
         setFontFamily(s.font_family ?? null);
         setWindowOpacity(s.window_opacity ?? 1.0);
         setCustomFonts(s.custom_fonts ?? []);
         setSystemShortcuts(s.system_shortcuts ?? {});
-        setCustomTemplates(s.custom_templates ?? []);
         setTextDirection(
           (s.text_direction as "auto" | "ltr" | "rtl") || "auto",
         );
+        setSettingsLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => {
+        setSettingsLoaded(true);
+      });
 
     const unlisten = listen<StikSettings>("settings-changed", (event) => {
-      setVimEnabled(event.payload.vim_mode_enabled);
-      setFontSize(event.payload.font_size ?? 14);
+      setFontSize(event.payload.font_size ?? 16);
       setFontFamily(event.payload.font_family ?? null);
       setWindowOpacity(event.payload.window_opacity ?? 1.0);
       setCustomFonts(event.payload.custom_fonts ?? []);
       setSystemShortcuts(event.payload.system_shortcuts ?? {});
-      setCustomTemplates(event.payload.custom_templates ?? []);
       setTextDirection(
         (event.payload.text_direction as "auto" | "ltr" | "rtl") || "auto",
       );
@@ -266,9 +250,9 @@ export default function PostIt({
 
   // Focus editor on mount, or when it becomes available after settings load
   useEffect(() => {
-    if (vimEnabled === null) return; // editor not mounted yet
+    if (!settingsLoaded) return; // editor not mounted yet
     setTimeout(() => editorRef.current?.focus(), 100);
-  }, [vimEnabled]);
+  }, [settingsLoaded]);
 
   // Flush pending cursor save immediately (used on blur / before close)
   const flushCursorSave = useCallback(() => {
@@ -315,7 +299,7 @@ export default function PostIt({
   // isRestoringCursorRef stays true until this completes, suppressing saves so
   // the initial (0,0) selection from editor mount can't overwrite the real position.
   useEffect(() => {
-    if (vimEnabled === null || !cursorPosKey) {
+    if (!settingsLoaded || !cursorPosKey) {
       // No restore needed (fresh riff or editor not ready yet) — unsuppress immediately
       isRestoringCursorRef.current = false;
       return;
@@ -337,28 +321,12 @@ export default function PostIt({
       clearTimeout(timer);
       isRestoringCursorRef.current = false;
     };
-  }, [vimEnabled, cursorPosKey]);
+  }, [settingsLoaded, cursorPosKey]);
 
-  const clearTransientSlashQuery = useCallback(() => {
-    const current = contentRef.current;
-    if (!isCaptureSlashQuery(current)) return;
-    // Close any open autocomplete first — resets CM6's "explicitly closed"
-    // state so activateOnTyping works correctly on the next session.
-    const view = editorRef.current?.getView();
-    if (view) closeCompletion(view);
-    flushSync(() => {
-      setContent("");
-      onContentChange?.("");
-    });
-    editorRef.current?.clear();
-    contentRef.current = "";
-  }, [onContentChange]);
-
-  // New shortcut-triggered session: reset transient slash state, and detach
-  // from any open draft when the editor is empty (fresh riff).
+  // New shortcut-triggered session: detach from any open draft when the
+  // editor is empty (fresh riff).
   useEffect(() => {
     const unlisten = listen("shortcut-triggered", () => {
-      clearTransientSlashQuery();
       if (isMarkdownEffectivelyEmpty(contentRef.current)) {
         setCurrentDraftPath(null);
       }
@@ -367,7 +335,7 @@ export default function PostIt({
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [clearTransientSlashQuery]);
+  }, []);
 
   // Re-focus editor when window regains focus (e.g. after hide/show cycle).
   // NOTE: Do NOT call clearTransientSlashQuery here — the OS focus event
@@ -377,12 +345,12 @@ export default function PostIt({
   // the blur-auto-hide logic in App.tsx (empty/slash content → hide window).
   useEffect(() => {
     const handleWindowFocus = () => {
-      if (isSaving || vimMode === "command") return;
+      if (isSaving) return;
       setTimeout(() => editorRef.current?.focus(), 50);
     };
     window.addEventListener("focus", handleWindowFocus);
     return () => window.removeEventListener("focus", handleWindowFocus);
-  }, [isSaving, vimMode]);
+  }, [isSaving]);
 
   // Slash-query state is cleared on new sessions via shortcut-triggered
   // and on save via handleSaveAndClose. No separate postit-blur listener
@@ -402,10 +370,9 @@ export default function PostIt({
 
   const handleSaveAndClose = useCallback(async () => {
     const currentContent = getLiveContent();
-    const isTransientSlashQuery = isCaptureSlashQuery(currentContent);
-    if (isTransientSlashQuery || isMarkdownEffectivelyEmpty(currentContent)) {
+    if (isMarkdownEffectivelyEmpty(currentContent)) {
       // An emptied draft is deleted on close (update_note removes empty notes).
-      if (currentDraftPath && !isTransientSlashQuery) {
+      if (currentDraftPath) {
         await invoke("update_note", {
           path: currentDraftPath,
           content: currentContent,
@@ -464,10 +431,7 @@ export default function PostIt({
   }, []);
 
   // Handle escape to save and close
-  // When vim mode is enabled, Escape is handled entirely by the vim plugin — close is via :q/:wq
   useEffect(() => {
-    if (vimEnabled) return; // Vim mode uses command bar (:q, :wq) instead of Escape
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
 
@@ -503,7 +467,7 @@ export default function PostIt({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSaving, isCopyMenuOpen, vimEnabled, handleSaveAndClose]);
+  }, [isSaving, isCopyMenuOpen, handleSaveAndClose]);
 
   // Zen mode shortcut (reads from settings, defaults to Cmd+.)
   useEffect(() => {
@@ -546,7 +510,7 @@ export default function PostIt({
       } else if (e.key === "-") {
         newSize = Math.max(fontSize - 1, 12);
       } else if (e.key === "0") {
-        newSize = 14;
+        newSize = 16;
       }
 
       if (newSize !== null && newSize !== fontSize) {
@@ -673,134 +637,9 @@ export default function PostIt({
       setContent(stored);
       contentRef.current = stored;
       onContentChange?.(stored);
-
-      // Slash-command autocomplete trigger.
-      if (isCaptureSlashQuery(newContent)) {
-        const query = newContent.slice(1).toLowerCase();
-        const matchesSlashCmd =
-          query === "" ||
-          getSlashCommandNames().some((cmd) => cmd.startsWith(query));
-
-        // Ensure CM6 autocomplete activates for slash commands.
-        // After a close+clear+reopen cycle, CM6's "explicitly closed" state
-        // can prevent activateOnTyping from reopening the panel. Explicitly
-        // triggering startCompletion is deterministic and harmless if the
-        // panel is already open.
-        if (matchesSlashCmd) {
-          setTimeout(() => {
-            const view = editorRef.current?.getView();
-            if (!view || completionStatus(view.state)) return;
-            // Guard: verify editor still has slash content (another handler
-            // could have cleared it between scheduling and execution).
-            const doc = view.state.doc.toString();
-            if (doc.startsWith("/")) {
-              startCompletion(view);
-            }
-          }, 0);
-        }
-      }
     },
     [],
   );
-
-  // --- Vim command bar ---
-  const dismissCommandBar = useCallback(() => {
-    setVimCommand("");
-    setVimCommandError("");
-    editorRef.current?.setVimMode("normal");
-    editorRef.current?.focus();
-  }, []);
-
-  const runVimSaveAndClose = useCallback(() => {
-    const currentContent = getLiveContent();
-    if (!isMarkdownEffectivelyEmpty(currentContent)) {
-      void handleSaveAndClose();
-    } else {
-      void onClose();
-    }
-  }, [handleSaveAndClose, onClose, getLiveContent]);
-
-  const runVimDiscardAndClose = useCallback(() => {
-    setContent("");
-    contentRef.current = "";
-    onContentChange?.("");
-    editorRef.current?.clear();
-    editorRef.current?.setVimMode("normal");
-    setVimCommand("");
-    setVimCommandError("");
-    setCurrentDraftPath(null);
-
-    void onClose();
-  }, [onClose, onContentChange]);
-
-  const executeVimCommand = useCallback(
-    (cmd: string) => {
-      const trimmed = cmd.trim();
-
-      switch (trimmed) {
-        case "wq":
-        case "x": // save and close
-          runVimSaveAndClose();
-          break;
-        case "q!": // discard and close (no save)
-          runVimDiscardAndClose();
-          break;
-        default:
-          setVimCommandError(`Not a command: ${trimmed}`);
-          return; // don't dismiss
-      }
-
-      setVimCommand("");
-      setVimCommandError("");
-    },
-    [runVimSaveAndClose, runVimDiscardAndClose],
-  );
-
-  // Focus command input when command mode opens
-  useEffect(() => {
-    if (vimMode === "command") {
-      setVimCommand("");
-      setVimCommandError("");
-      // Small delay so the input renders first
-      requestAnimationFrame(() => commandInputRef.current?.focus());
-    }
-  }, [vimMode]);
-
-  // Vim ":" command bar trigger.
-  // Capture phase ensures we can open our custom command bar before CM-vim
-  // opens its internal panel, keeping one consistent UX.
-  useEffect(() => {
-    if (!vimEnabled) return;
-
-    const handleVimCommandTrigger = (e: KeyboardEvent) => {
-      const target = e.target;
-      const targetInsideEditor =
-        target instanceof Element && Boolean(target.closest(".cm-editor"));
-      if (
-        !shouldOpenVimCommandBar({
-          key: e.key,
-          metaKey: e.metaKey,
-          ctrlKey: e.ctrlKey,
-          altKey: e.altKey,
-          vimEnabled,
-          vimMode,
-          targetInsideEditor,
-        })
-      ) {
-        return;
-      }
-
-      e.preventDefault();
-      e.stopPropagation();
-      setVimCommand("");
-      setVimCommandError("");
-      setVimMode("command");
-    };
-
-    window.addEventListener("keydown", handleVimCommandTrigger, true);
-    return () =>
-      window.removeEventListener("keydown", handleVimCommandTrigger, true);
-  }, [vimEnabled, vimMode]);
 
   const startDrag = useCallback(async (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
@@ -864,10 +703,7 @@ export default function PostIt({
       if (!path) return;
       try {
         const currentContent = getLiveContent();
-        if (
-          !isMarkdownEffectivelyEmpty(currentContent) &&
-          !isCaptureSlashQuery(currentContent)
-        ) {
+        if (!isMarkdownEffectivelyEmpty(currentContent)) {
           if (currentDraftPath) {
             await invoke("update_note", {
               path: currentDraftPath,
@@ -1045,20 +881,16 @@ export default function PostIt({
             { "--editor-font-size": `${fontSize}px` } as React.CSSProperties
           }
         >
-          {vimEnabled === null ? (
+          {!settingsLoaded ? (
             <div className="h-full" /> // placeholder while settings load
           ) : (
             <Editor
-              key={`${vimEnabled ? "vim" : "novim"}-${textDirection}`}
+              key={textDirection}
               ref={editorRef}
               onChange={handleContentChange}
               placeholder={t("postit.typePlaceholder")}
-              vimEnabled={vimEnabled}
               showFormatToolbar={zenMode ? false : formatToolbar}
               textDirection={textDirection}
-              onVimModeChange={setVimMode}
-              onVimSaveAndClose={runVimSaveAndClose}
-              onVimCloseWithoutSaving={runVimDiscardAndClose}
               onImagePaste={handleImagePaste}
               onImageDropPath={handleImageDropPath}
               onWikiLinkClick={handleWikiLinkClick}
@@ -1067,53 +899,8 @@ export default function PostIt({
           )}
         </div>
 
-        {/* Footer - draggable (or command bar when vim command mode) */}
-        {/* Vim command bar always renders when active (even in zen mode) */}
-        {(!zenMode || (vimEnabled && vimMode === "command")) &&
-          (vimEnabled && vimMode === "command" ? (
-            <div
-              data-capture-hide
-              className="flex flex-col border-t border-line"
-            >
-              {/* entire vim command bar hidden during capture */}
-              {vimCommandError && (
-                <div className="px-4 py-1 text-[11px] text-coral bg-coral-light/30">
-                  {vimCommandError}
-                </div>
-              )}
-              <div className="flex items-center px-4 py-1.5 bg-ink/5">
-                <span className="text-[13px] font-mono text-coral font-bold mr-0.5">
-                  :
-                </span>
-                <input
-                  ref={commandInputRef}
-                  type="text"
-                  aria-label={t("postit.vimCommandLabel")}
-                  value={vimCommand}
-                  onChange={(e) => {
-                    setVimCommand(e.target.value);
-                    setVimCommandError("");
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      executeVimCommand(vimCommand);
-                    } else if (e.key === "Escape") {
-                      e.preventDefault();
-                      dismissCommandBar();
-                    } else if (e.key === "Backspace" && !vimCommand) {
-                      e.preventDefault();
-                      dismissCommandBar();
-                    }
-                  }}
-                  className="flex-1 bg-transparent text-[13px] font-mono text-ink outline-none focus-visible:ring-2 focus-visible:ring-coral focus-visible:rounded-sm placeholder:text-stone/50"
-                  placeholder="wq  q!"
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-              </div>
-            </div>
-          ) : (
+        {/* Footer - draggable */}
+        {!zenMode && (
             <div
               onMouseDown={startDrag}
               className="flex items-center justify-between px-4 py-2 border-t border-line text-[10px] drag-handle"
@@ -1124,64 +911,48 @@ export default function PostIt({
                 </span>
               </span>
               <div className="flex items-center gap-2">
-                {vimEnabled ? (
-                  <span className="vim-mode-indicator text-stone">
-                    {vimMode === "normal" ? (
-                      <span className="text-coral">-- NORMAL --</span>
-                    ) : vimMode === "visual" ? (
-                      <span className="text-amber-500">-- VISUAL --</span>
-                    ) : vimMode === "visual-line" ? (
-                      <span className="text-amber-500">-- VISUAL LINE --</span>
-                    ) : (
-                      <span className="text-green-600">-- INSERT --</span>
-                    )}
-                  </span>
-                ) : (
-                  <span className="text-stone">
-                    <span className="text-coral">✦</span>  {t("postit.markdownSupported")}
-                  </span>
-                )}
+                <span className="text-stone">
+                  <span className="text-coral">✦</span>  {t("postit.markdownSupported")}
+                </span>
                 {onOpenSettings && (
                   <span data-capture-hide className="contents">
-                    {!vimEnabled && (
-                      <button
-                        onClick={() => {
-                          const next = !formatToolbar;
-                          setFormatToolbar(next);
-                          try {
-                            localStorage.setItem(
-                              "stik:format-toolbar",
-                              next ? "1" : "0",
-                            );
-                          } catch {}
-                        }}
-                        className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors ${
-                          formatToolbar
-                            ? "text-coral hover:bg-coral-light"
-                            : "text-stone hover:bg-line hover:text-ink"
-                        }`}
-                        title={
-                          formatToolbar
-                            ? t("postit.hideFormatButtons")
-                            : t("postit.showFormatButtons")
-                        }
+                    <button
+                      onClick={() => {
+                        const next = !formatToolbar;
+                        setFormatToolbar(next);
+                        try {
+                          localStorage.setItem(
+                            "stik:format-toolbar",
+                            next ? "1" : "0",
+                          );
+                        } catch {}
+                      }}
+                      className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors ${
+                        formatToolbar
+                          ? "text-coral hover:bg-coral-light"
+                          : "text-stone hover:bg-line hover:text-ink"
+                      }`}
+                      title={
+                        formatToolbar
+                          ? t("postit.hideFormatButtons")
+                          : t("postit.showFormatButtons")
+                      }
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                       >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M4 7V4h16v3" />
-                          <path d="M9 20h6" />
-                          <path d="M12 4v16" />
-                        </svg>
-                      </button>
-                    )}
+                        <path d="M4 7V4h16v3" />
+                        <path d="M9 20h6" />
+                        <path d="M12 4v16" />
+                      </svg>
+                    </button>
                     <button
                       onClick={() => invoke("open_command_palette")}
                       className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-line text-stone hover:text-ink transition-colors"
@@ -1224,7 +995,7 @@ export default function PostIt({
                 )}
               </div>
             </div>
-          ))}
+        )}
       </div>
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
     </>

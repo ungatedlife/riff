@@ -3,12 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import SettingsContent from "./SettingsContent";
-import SettingsFooterLinks from "./SettingsFooterLinks";
 import type { SettingsTab } from "./SettingsContent";
 import type { StikSettings } from "@/types";
 import { createCoalescedTaskRunner } from "@/utils/coalescedTaskRunner";
 import { useTranslation } from "@/hooks/useTranslation";
-import { channelLabel } from "@/utils/appChannel";
 import type { TranslationKey } from "@/i18n";
 import {
   SETTINGS_MODAL_MAX_WIDTH,
@@ -58,8 +56,8 @@ const TABS: { id: SettingsTab; labelKey: TranslationKey; icon: React.ReactNode }
     ),
   },
   {
-    id: "folders",
-    labelKey: "settings.tab.folders",
+    id: "publishing",
+    labelKey: "settings.tab.publishing",
     icon: (
       <svg
         width="16"
@@ -71,13 +69,14 @@ const TABS: { id: SettingsTab; labelKey: TranslationKey; icon: React.ReactNode }
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        <path d="m22 2-7 20-4-9-9-4Z" />
+        <path d="M22 2 11 13" />
       </svg>
     ),
   },
   {
-    id: "editor",
-    labelKey: "settings.tab.editor",
+    id: "about",
+    labelKey: "settings.tab.about",
     icon: (
       <svg
         width="16"
@@ -89,30 +88,9 @@ const TABS: { id: SettingsTab; labelKey: TranslationKey; icon: React.ReactNode }
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-        <path d="m15 5 4 4" />
-      </svg>
-    ),
-  },
-  {
-    id: "templates",
-    labelKey: "settings.tab.templates",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="16" y1="13" x2="8" y2="13" />
-        <line x1="16" y1="17" x2="8" y2="17" />
-        <polyline points="10 9 9 9 8 9" />
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 16v-4" />
+        <path d="M12 8h.01" />
       </svg>
     ),
   },
@@ -133,7 +111,6 @@ export default function SettingsModal({
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const [settings, setSettings] = useState<StikSettings | null>(null);
   const [appVersion, setAppVersion] = useState("");
-  const betaLabel = channelLabel(appVersion);
 
   const [resolvedNotesDir, setResolvedNotesDir] = useState("");
 
@@ -264,6 +241,7 @@ export default function SettingsModal({
       settings={settings}
       onSettingsChange={handleSettingsChange}
       resolvedNotesDir={resolvedNotesDir}
+      appVersion={appVersion}
     />
   );
 
@@ -293,14 +271,6 @@ export default function SettingsModal({
               <h2 className="text-[15px] font-semibold text-ink">
                 {t("settings.title")}
               </h2>
-              {betaLabel && (
-                <span
-                  className="px-1.5 py-0.5 rounded-md bg-coral/15 text-coral text-[9px] font-bold tracking-wide"
-                  title={`${t("settings.betaBuild")} — v${appVersion}`}
-                >
-                  {betaLabel}
-                </span>
-              )}
             </div>
             <button
               type="button"
@@ -327,9 +297,6 @@ export default function SettingsModal({
         </div>
         <div className="flex-1 overflow-y-auto scrollbar-hide p-5">
           {settingsContent}
-        </div>
-        <div className="flex items-center px-5 py-3 border-t border-line bg-line/10">
-          <SettingsFooterLinks appVersion={appVersion} />
         </div>
       </div>
     );
@@ -364,14 +331,6 @@ export default function SettingsModal({
               <h2 className="text-[15px] font-semibold text-ink">
                 {t("settings.title")}
               </h2>
-              {betaLabel && (
-                <span
-                  className="px-1.5 py-0.5 rounded-md bg-coral/15 text-coral text-[9px] font-bold tracking-wide"
-                  title={`${t("settings.betaBuild")} — v${appVersion}`}
-                >
-                  {betaLabel}
-                </span>
-              )}
             </div>
             <button
               type="button"
@@ -398,9 +357,6 @@ export default function SettingsModal({
         </div>
         <div className="flex-1 overflow-y-auto scrollbar-hide p-5">
           {settingsContent}
-        </div>
-        <div className="flex items-center px-5 py-3 border-t border-line bg-line/10">
-          <SettingsFooterLinks appVersion={appVersion} />
         </div>
       </div>
     </div>

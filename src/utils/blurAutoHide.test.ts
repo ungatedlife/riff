@@ -12,16 +12,6 @@ describe("shouldHideCaptureOnBlur", () => {
     ).toBe(true);
   });
 
-  it("hides when content is only a slash query and grace is inactive", () => {
-    expect(
-      shouldHideCaptureOnBlur({
-        content: "/work",
-        nowMs: 2000,
-        ignoreUntilMs: 1000,
-      })
-    ).toBe(true);
-  });
-
   it("does not hide while grace window is active", () => {
     expect(
       shouldHideCaptureOnBlur({

@@ -347,6 +347,12 @@ export const en = {
   "palette.fromFolder": "From: {folder}",
   "dictation.firstLoadHigh": "First load can take up to 2 minutes for the High quality model. This only happens once — subsequent launches are instant.",
   "dictation.modelListFailed": "Couldn't load model list: {error}",
+  "settings.tab.publishing": "Publishing",
+  "settings.tab.about": "About",
+  "settings.about.tagline":
+    "A quiet room for writing one small, complete thing at a time.",
+  "settings.about.credit":
+    "Riff is built on Stik by Massi (MIT). The live-preview markdown editor and the writing feel are his craft.",
   "shortcut.summon": "New riff",
   "shortcut.search": "Command Palette",
   "shortcut.manager": "Command Palette (alt)",

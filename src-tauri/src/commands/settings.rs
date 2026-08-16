@@ -5,12 +5,6 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct CustomTemplate {
-    pub name: String,
-    pub body: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CustomFontEntry {
     pub name: String,
     pub path: String,
@@ -43,7 +37,7 @@ fn default_window_opacity() -> f64 {
 }
 
 fn default_font_size() -> u32 {
-    14
+    16
 }
 
 fn default_text_direction() -> String {
@@ -52,8 +46,6 @@ fn default_text_direction() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StikSettings {
-    #[serde(default)]
-    pub vim_mode_enabled: bool,
     #[serde(default)]
     pub theme_mode: String,
     /// Absolute path of the drafts directory. None/empty = ~/Documents/Riff.
@@ -69,8 +61,6 @@ pub struct StikSettings {
     pub window_size: Option<(f64, f64)>,
     #[serde(default)]
     pub window_position: Option<(f64, f64)>,
-    #[serde(default)]
-    pub custom_templates: Vec<CustomTemplate>,
     #[serde(default = "default_text_direction")]
     pub text_direction: String,
     #[serde(default)]
@@ -85,25 +75,18 @@ pub struct StikSettings {
     pub window_opacity: f64,
     #[serde(default)]
     pub custom_fonts: Vec<CustomFontEntry>,
-    /// BCP-47 locale tag for the UI language ("en", "zh-CN").
-    /// Empty string means "follow the system language".
-    #[serde(default)]
-    pub language: String,
 }
 
 impl Default for StikSettings {
     fn default() -> Self {
         Self {
-            language: String::new(),
-            vim_mode_enabled: false,
             theme_mode: String::new(),
             drafts_dir: None,
             hide_dock_icon: false,
             system_shortcuts: default_system_shortcuts(),
-            font_size: 14,
+            font_size: 16,
             window_size: None,
             window_position: None,
-            custom_templates: vec![],
             text_direction: "auto".to_string(),
             hide_tray_icon: false,
             active_theme: String::new(),
