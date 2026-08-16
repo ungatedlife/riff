@@ -81,6 +81,11 @@ export default function PostIt({
   const [isCopyMenuOpen, setIsCopyMenuOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [publishState, setPublishState] = useState<
+    "idle" | "confirm" | "publishing" | "done"
+  >("idle");
+  const [pendingTitle, setPendingTitle] = useState("");
+  const [vaultDir, setVaultDir] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(16);
   const [fontFamily, setFontFamily] = useState<string | null>(null);
   const [windowOpacity, setWindowOpacity] = useState(1.0);
@@ -224,6 +229,7 @@ export default function PostIt({
         setWindowOpacity(s.window_opacity ?? 1.0);
         setCustomFonts(s.custom_fonts ?? []);
         setSystemShortcuts(s.system_shortcuts ?? {});
+        setVaultDir(s.vault_dir ?? null);
         setTextDirection(
           (s.text_direction as "auto" | "ltr" | "rtl") || "auto",
         );
@@ -239,6 +245,7 @@ export default function PostIt({
       setWindowOpacity(event.payload.window_opacity ?? 1.0);
       setCustomFonts(event.payload.custom_fonts ?? []);
       setSystemShortcuts(event.payload.system_shortcuts ?? {});
+      setVaultDir(event.payload.vault_dir ?? null);
       setTextDirection(
         (event.payload.text_direction as "auto" | "ltr" | "rtl") || "auto",
       );
@@ -434,6 +441,7 @@ export default function PostIt({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      if (publishState !== "idle") return; // publish flow owns the keys
 
       const target = e.target as Element | null;
       const inLinkPopover = Boolean(target?.closest(".link-popover"));
@@ -467,7 +475,7 @@ export default function PostIt({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSaving, isCopyMenuOpen, handleSaveAndClose]);
+  }, [isSaving, isCopyMenuOpen, publishState, handleSaveAndClose]);
 
   // Zen mode shortcut (reads from settings, defaults to Cmd+.)
   useEffect(() => {
@@ -641,6 +649,104 @@ export default function PostIt({
     [],
   );
 
+  // ── Publish ritual ────────────────────────────────────────────────
+
+  // Hold the window open while confirming/publishing — the room otherwise
+  // auto-hides on blur once the editor empties.
+  useEffect(() => {
+    (window as unknown as { __riffHoldOpen?: boolean }).__riffHoldOpen =
+      publishState !== "idle";
+    return () => {
+      (window as unknown as { __riffHoldOpen?: boolean }).__riffHoldOpen =
+        false;
+    };
+  }, [publishState]);
+
+  const requestPublish = useCallback(() => {
+    const currentContent = getLiveContent();
+    if (isMarkdownEffectivelyEmpty(currentContent)) {
+      showToast(t("publish.nothing"));
+      return;
+    }
+    if (!vaultDir) {
+      showToast(t("publish.noVault"));
+      void invoke("open_settings");
+      return;
+    }
+    const firstLine =
+      currentContent.split("\n").find((l) => l.trim().length > 0) ?? "";
+    setPendingTitle(
+      firstLine
+        .replace(/^#+\s*/, "")
+        .replace(/[*_`~=]/g, "")
+        .trim(),
+    );
+    setPublishState("confirm");
+  }, [getLiveContent, vaultDir, showToast, t]);
+
+  const confirmPublish = useCallback(async () => {
+    const currentContent = getLiveContent();
+    setPublishState("publishing");
+    try {
+      let path = currentDraftPath;
+      if (path) {
+        await invoke("update_note", { path, content: currentContent });
+      } else {
+        const saved = (await onSave(currentContent)) || undefined;
+        path = saved ?? null;
+      }
+      if (!path) {
+        throw new Error("Could not save the draft before publishing");
+      }
+
+      const info = await invoke<{ title: string }>("publish_riff", { path });
+      setPendingTitle(info.title);
+      setPublishState("done");
+
+      setTimeout(async () => {
+        setContent("");
+        contentRef.current = "";
+        onContentChange?.("");
+        editorRef.current?.clear();
+        setCurrentDraftPath(null);
+        setPublishState("idle");
+        await onClose();
+      }, 1100);
+    } catch (error) {
+      console.error("Failed to publish riff:", error);
+      setPublishState("idle");
+      showToast(String(error));
+    }
+  }, [
+    currentDraftPath,
+    getLiveContent,
+    onSave,
+    onClose,
+    onContentChange,
+    showToast,
+  ]);
+
+  // Keys for the confirm overlay: Enter/⌘↩ publishes, Escape keeps riffing.
+  useEffect(() => {
+    if (publishState !== "confirm") return;
+
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        void confirmPublish();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setPublishState("idle");
+        setTimeout(() => editorRef.current?.focus(), 50);
+      }
+    };
+
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [publishState, confirmPublish]);
+
   const startDrag = useCallback(async (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
     try {
@@ -803,7 +909,7 @@ export default function PostIt({
   return (
     <>
       <div
-        className={`w-full h-full rounded-[14px] overflow-hidden flex flex-col ${
+        className={`relative w-full h-full rounded-[14px] overflow-hidden flex flex-col ${
           zenMode ? "zen-mode" : ""
         }`}
         style={{ backgroundColor: `rgb(var(--color-bg) / ${windowOpacity})` }}
@@ -863,6 +969,13 @@ export default function PostIt({
                 </div>
 
                 <button
+                  onClick={requestPublish}
+                  className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold transition-colors bg-coral text-white hover:bg-coral/90 cursor-pointer"
+                  title={t("publish.action")}
+                >
+                  {t("publish.button")} ⌘↩
+                </button>
+                <button
                   onClick={handleSaveAndClose}
                   className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold transition-colors bg-coral-light text-coral hover:bg-coral hover:text-white cursor-pointer"
                   title={t("postit.saveAndClose")}
@@ -891,6 +1004,7 @@ export default function PostIt({
               placeholder={t("postit.typePlaceholder")}
               showFormatToolbar={zenMode ? false : formatToolbar}
               textDirection={textDirection}
+              onPublish={requestPublish}
               onImagePaste={handleImagePaste}
               onImageDropPath={handleImageDropPath}
               onWikiLinkClick={handleWikiLinkClick}
@@ -995,6 +1109,62 @@ export default function PostIt({
                 )}
               </div>
             </div>
+        )}
+
+        {/* Publish overlay: confirm → publishing → done */}
+        {publishState !== "idle" && (
+          <div className="absolute inset-0 z-[220] flex items-center justify-center rounded-[14px] bg-bg/90 backdrop-blur-sm">
+            {publishState === "done" ? (
+              <div className="flex flex-col items-center gap-3 px-6 text-center">
+                <svg
+                  className="save-checkmark text-coral"
+                  viewBox="0 0 52 52"
+                  width="40"
+                  height="40"
+                >
+                  <circle
+                    className="save-circle"
+                    cx="26"
+                    cy="26"
+                    r="24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                  />
+                  <path
+                    className="save-check"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 26l7 7 15-15"
+                  />
+                </svg>
+                <p className="save-text text-coral font-semibold text-sm">
+                  {t("publish.done")}
+                </p>
+                <p className="text-stone text-xs max-w-[340px] truncate">
+                  {pendingTitle}
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3 px-6 text-center">
+                <p className="text-ink text-sm font-semibold max-w-[380px] truncate">
+                  {pendingTitle || t("publish.button")}
+                </p>
+                {publishState === "publishing" ? (
+                  <p className="text-stone text-xs animate-pulse">
+                    {t("publish.publishing")}
+                  </p>
+                ) : (
+                  <p className="text-stone text-xs">
+                    {t("publish.confirmHint")}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}

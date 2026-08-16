@@ -51,6 +51,9 @@ pub struct StikSettings {
     /// Absolute path of the drafts directory. None/empty = ~/Documents/Riff.
     #[serde(default)]
     pub drafts_dir: Option<String>,
+    /// Absolute path of the vault folder finished riffs publish into.
+    #[serde(default)]
+    pub vault_dir: Option<String>,
     #[serde(default)]
     pub hide_dock_icon: bool,
     #[serde(default)]
@@ -82,6 +85,7 @@ impl Default for StikSettings {
         Self {
             theme_mode: String::new(),
             drafts_dir: None,
+            vault_dir: None,
             hide_dock_icon: false,
             system_shortcuts: default_system_shortcuts(),
             font_size: 16,

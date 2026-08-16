@@ -26,6 +26,8 @@ export interface StikSettings {
   theme_mode: string;
   /** Absolute path of the drafts directory. Empty/undefined = ~/Documents/Riff. */
   drafts_dir?: string | null;
+  /** Absolute path of the vault folder finished riffs publish into. */
+  vault_dir?: string | null;
   hide_dock_icon: boolean;
   system_shortcuts: Record<string, string>;
   font_size: number;

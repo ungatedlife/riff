@@ -67,6 +67,7 @@ interface EditorProps {
   initialContent?: string;
   showFormatToolbar?: boolean;
   textDirection?: "auto" | "ltr" | "rtl";
+  onPublish?: () => void;
   onImagePaste?: (file: File) => Promise<string | null>;
   onImageDropPath?: (path: string) => Promise<string | null>;
   onWikiLinkClick?: (slug: string, path: string) => void;
@@ -100,6 +101,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(
       initialContent,
       showFormatToolbar,
       textDirection = "auto",
+      onPublish,
       onImagePaste,
       onImageDropPath,
       onWikiLinkClick,
@@ -123,6 +125,8 @@ const Editor = forwardRef<EditorRef, EditorProps>(
     // Stable refs for callbacks to avoid recreating extensions
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
+    const onPublishRef = useRef(onPublish);
+    onPublishRef.current = onPublish;
     const onImagePasteRef = useRef(onImagePaste);
     onImagePasteRef.current = onImagePaste;
     const onImageDropPathRef = useRef(onImageDropPath);
@@ -144,6 +148,15 @@ const Editor = forwardRef<EditorRef, EditorProps>(
       if (!containerRef.current) return;
 
       const formatKeybindings = keymap.of([
+        // Publish the riff. Registered before defaultKeymap so it shadows
+        // the stock Mod-Enter (insertBlankLine).
+        {
+          key: "Mod-Enter",
+          run: () => {
+            onPublishRef.current?.();
+            return true;
+          },
+        },
         {
           key: "Escape",
           run: (view) => {

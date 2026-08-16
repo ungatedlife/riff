@@ -63,6 +63,14 @@ export default function NoteList({
     );
   }
 
+  if (results.length === 0 && !hasQuery && !isSearching && !isCreatingNote) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <span className="text-stone text-sm">{t("palette.empty")}</span>
+      </div>
+    );
+  }
+
   return (
     <div ref={resultsRef} className="flex-1 overflow-y-auto">
       {/* Inline create-note input */}

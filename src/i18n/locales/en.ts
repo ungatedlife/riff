@@ -347,6 +347,21 @@ export const en = {
   "palette.fromFolder": "From: {folder}",
   "dictation.firstLoadHigh": "First load can take up to 2 minutes for the High quality model. This only happens once — subsequent launches are instant.",
   "dictation.modelListFailed": "Couldn't load model list: {error}",
+  "publish.button": "Publish",
+  "publish.action": "Publish this riff (⌘↩)",
+  "publish.nothing": "Nothing to publish yet",
+  "publish.noVault": "Pick a vault folder in Settings first",
+  "publish.confirmHint": "⌘↩ to publish · esc to keep riffing",
+  "publish.publishing": "Publishing…",
+  "publish.done": "In the vault",
+  "palette.empty": "No drafts. Everything's published.",
+  "settings.vaultDir": "Vault folder",
+  "settings.vaultDir.none": "Not set",
+  "settings.vaultDir.describe":
+    "Publish stamps the riff with a title and date, moves it and its images here, and clears the room. Your site's pipeline takes it from there.",
+  "settings.draftsDir": "Drafts folder",
+  "settings.draftsDir.describe":
+    "Where riffs live while they're still in progress.",
   "settings.tab.publishing": "Publishing",
   "settings.tab.about": "About",
   "settings.about.tagline":

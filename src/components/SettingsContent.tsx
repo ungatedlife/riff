@@ -1208,7 +1208,54 @@ export default function SettingsContent({
       {activeTab === "publishing" && (
         <div className="space-y-4">
           <div>
-            <p className="text-[12px] text-stone mb-1.5">{t("settings.notesDirectory")}</p>
+            <p className="text-[12px] text-stone mb-1.5">{t("settings.vaultDir")}</p>
+            <div className="flex items-center gap-2">
+              <div
+                className={`flex-1 px-3 py-2.5 bg-bg border border-line rounded-lg text-[13px] font-mono truncate ${
+                  settings.vault_dir ? "text-ink" : "text-stone"
+                }`}
+              >
+                {settings.vault_dir || t("settings.vaultDir.none")}
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  const selected = await open({
+                    directory: true,
+                    multiple: false,
+                    title: t("settings.vaultDir"),
+                    defaultPath: settings.vault_dir || undefined,
+                  });
+                  if (selected) {
+                    onSettingsChange({
+                      ...settings,
+                      vault_dir: selected,
+                    });
+                  }
+                }}
+                className="px-3 py-2.5 text-[12px] text-coral border border-coral/30 rounded-lg hover:bg-coral-light transition-colors whitespace-nowrap"
+              >
+                {t("common.browse")}
+              </button>
+              {settings.vault_dir && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSettingsChange({ ...settings, vault_dir: null })
+                  }
+                  className="px-3 py-2.5 text-[12px] text-stone hover:text-coral border border-line rounded-lg hover:border-coral/30 transition-colors whitespace-nowrap"
+                >
+                  {t("common.reset")}
+                </button>
+              )}
+            </div>
+            <p className="mt-1.5 text-[12px] text-stone leading-relaxed">
+              {t("settings.vaultDir.describe")}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[12px] text-stone mb-1.5">{t("settings.draftsDir")}</p>
               <div className="flex items-center gap-2">
                 <div className="flex-1 px-3 py-2.5 bg-bg border border-line rounded-lg text-[13px] font-mono truncate text-ink">
                   {notesDir}
@@ -1246,12 +1293,9 @@ export default function SettingsContent({
                   </button>
                 )}
               </div>
-          </div>
-
-          <div className="p-3 bg-coral-light/40 border border-coral/20 rounded-xl">
-            <p className="text-[12px] text-stone leading-relaxed">
-              {t("settings.syncTip", { dir: notesDir })}
-            </p>
+              <p className="mt-1.5 text-[12px] text-stone leading-relaxed">
+                {t("settings.draftsDir.describe")}
+              </p>
           </div>
         </div>
       )}

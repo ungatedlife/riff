@@ -2,6 +2,7 @@ pub mod cursor_positions;
 pub mod file_watcher;
 pub mod index;
 pub mod notes;
+pub mod publish;
 pub mod settings;
 pub mod share;
 pub mod storage;

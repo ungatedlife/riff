@@ -8,7 +8,7 @@ mod tray;
 mod windows;
 
 use commands::index::NoteIndex;
-use commands::{cursor_positions, file_watcher, index, notes, settings, share, storage};
+use commands::{cursor_positions, file_watcher, index, notes, publish, settings, share, storage};
 use shortcuts::shortcut_to_string;
 use state::AppState;
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
@@ -99,6 +99,7 @@ fn main() {
             notes::save_note_image,
             notes::save_note_image_from_path,
             storage::get_drafts_directory,
+            publish::publish_riff,
             index::rebuild_index,
             settings::get_settings,
             settings::save_settings,
