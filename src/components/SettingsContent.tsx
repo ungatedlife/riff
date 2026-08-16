@@ -6,7 +6,6 @@ import type {
   CustomFontEntry,
   CustomTemplate,
   CustomThemeDefinition,
-  ShortcutMapping,
   StikSettings,
   ThemeColors,
 } from "@/types";
@@ -115,7 +114,6 @@ export type SettingsTab =
 interface SettingsContentProps {
   activeTab: SettingsTab;
   settings: StikSettings;
-  folders: string[];
   onSettingsChange: (settings: StikSettings) => void;
   resolvedNotesDir: string;
 }
@@ -1302,66 +1300,11 @@ function TemplatesSection({
 export default function SettingsContent({
   activeTab,
   settings,
-  folders,
   onSettingsChange,
   resolvedNotesDir,
 }: SettingsContentProps) {
   const { t } = useTranslation();
-  const notesDir = settings.notes_directory
-    ? settings.use_directory_as_root
-      ? settings.notes_directory
-      : `${settings.notes_directory}/Stik`
-    : resolvedNotesDir || "~/Documents/Stik";
-
-  const updateMapping = (index: number, updates: Partial<ShortcutMapping>) => {
-    const newMappings = [...settings.shortcut_mappings];
-    newMappings[index] = { ...newMappings[index], ...updates };
-    onSettingsChange({ ...settings, shortcut_mappings: newMappings });
-  };
-
-  const removeMapping = (index: number) => {
-    const newMappings = settings.shortcut_mappings.filter(
-      (_, i) => i !== index,
-    );
-    onSettingsChange({ ...settings, shortcut_mappings: newMappings });
-  };
-
-  const systemShortcutValues = Object.values(settings.system_shortcuts ?? {});
-
-  const addMapping = () => {
-    const usedShortcuts = settings.shortcut_mappings.map((m) => m.shortcut);
-    let defaultShortcut = "Cmd+Shift+S";
-
-    const letters = "ABCDEFGHIJKLNOQRTUVWXYZ".split("");
-    for (const letter of letters) {
-      const shortcut = `Cmd+Shift+${letter}`;
-      if (
-        !usedShortcuts.includes(shortcut) &&
-        !systemShortcutValues.includes(shortcut)
-      ) {
-        defaultShortcut = shortcut;
-        break;
-      }
-    }
-
-    onSettingsChange({
-      ...settings,
-      shortcut_mappings: [
-        ...settings.shortcut_mappings,
-        {
-          shortcut: defaultShortcut,
-          folder: folders[0] || "Inbox",
-          enabled: true,
-        },
-      ],
-    });
-  };
-
-  const getExistingShortcuts = (excludeIndex?: number) => {
-    return settings.shortcut_mappings
-      .filter((_, i) => i !== excludeIndex)
-      .map((m) => m.shortcut);
-  };
+  const notesDir = settings.drafts_dir || resolvedNotesDir || "~/Documents/Riff";
 
   return (
     <div>
@@ -1378,67 +1321,7 @@ export default function SettingsContent({
             {t("settings.shortcut.intro")}
           </p>
 
-          <div className="space-y-2">
-            {settings.shortcut_mappings.map((mapping, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-2 px-3 py-2 bg-line/30 rounded-xl border border-line/50"
-              >
-                <div className="flex-1 min-w-0">
-                  <ShortcutRecorder
-                    value={mapping.shortcut}
-                    onChange={(value) =>
-                      updateMapping(index, { shortcut: value })
-                    }
-                    reservedShortcuts={systemShortcutValues}
-                    existingShortcuts={getExistingShortcuts(index)}
-                  />
-                </div>
-                <span className="text-coral text-sm">→</span>
-                <div className="flex-1">
-                  <Dropdown
-                    value={mapping.folder}
-                    options={folders.map((f) => ({ value: f, label: f }))}
-                    onChange={(value) =>
-                      updateMapping(index, { folder: value })
-                    }
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeMapping(index)}
-                  className="w-6 h-6 shrink-0 flex items-center justify-center rounded-md hover:bg-coral-light text-stone hover:text-coral transition-colors"
-                  title={t("settings.shortcut.remove")}
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 6h18" />
-                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={addMapping}
-            className="mt-4 w-full px-4 py-3 text-[13px] text-coral hover:bg-coral-light rounded-xl transition-colors flex items-center justify-center gap-2 border border-dashed border-coral/30 hover:border-coral/50"
-          >
-            <span className="text-lg">+</span>
-            <span>{t("settings.shortcut.add")}</span>
-          </button>
-
-          <div className="mt-6">
+          <div>
             <p className="text-[12px] text-stone mb-3">{t("settings.shortcut.system")}</p>
             <div className="space-y-2">
               {SYSTEM_SHORTCUT_ACTIONS.map((action) => {
@@ -1454,9 +1337,6 @@ export default function SettingsContent({
                   (a) =>
                     settings.system_shortcuts?.[a] ??
                     SYSTEM_SHORTCUT_DEFAULTS[a],
-                );
-                const folderShortcuts = settings.shortcut_mappings.map(
-                  (m) => m.shortcut,
                 );
 
                 return (
@@ -1480,7 +1360,7 @@ export default function SettingsContent({
                           })
                         }
                         reservedShortcuts={otherSystemShortcuts}
-                        existingShortcuts={folderShortcuts}
+                        existingShortcuts={[]}
                       />
                     </div>
                     {!isDefault && (
@@ -1558,14 +1438,12 @@ export default function SettingsContent({
                       multiple: false,
                       title: t("settings.notesDirectory.choose"),
                       defaultPath:
-                        settings.notes_directory ||
-                        resolvedNotesDir ||
-                        undefined,
+                        settings.drafts_dir || resolvedNotesDir || undefined,
                     });
                     if (selected) {
                       onSettingsChange({
                         ...settings,
-                        notes_directory: selected,
+                        drafts_dir: selected,
                       });
                     }
                   }}
@@ -1573,11 +1451,11 @@ export default function SettingsContent({
                 >
                   {t("common.browse")}
                 </button>
-                {settings.notes_directory && (
+                {settings.drafts_dir && (
                   <button
                     type="button"
                     onClick={() =>
-                      onSettingsChange({ ...settings, notes_directory: "" })
+                      onSettingsChange({ ...settings, drafts_dir: null })
                     }
                     className="px-3 py-2.5 text-[12px] text-stone hover:text-coral border border-line rounded-lg hover:border-coral/30 transition-colors whitespace-nowrap"
                   >
@@ -1585,45 +1463,6 @@ export default function SettingsContent({
                   </button>
                 )}
               </div>
-              {!settings.use_directory_as_root && (
-                <p className="mt-1.5 text-[12px] text-stone leading-relaxed">
-                  {t("settings.notesDirectory.stikFolderNote")}
-                </p>
-              )}
-              {settings.notes_directory && (
-                <label className="flex items-center gap-2 mt-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.use_directory_as_root ?? false}
-                    onChange={(e) =>
-                      onSettingsChange({
-                        ...settings,
-                        use_directory_as_root: e.target.checked,
-                      })
-                    }
-                    className="rounded border-line"
-                  />
-                  <span className="text-[12px] text-ink">
-                    {t("settings.notesDirectory.asRoot")}
-                  </span>
-                </label>
-              )}
-          </div>
-
-          <div>
-            <p className="text-[12px] text-stone mb-1.5">{t("settings.defaultFolder")}</p>
-            <div className="max-w-[360px]">
-              <Dropdown
-                value={settings.default_folder}
-                options={folders.map((f) => ({ value: f, label: f }))}
-                onChange={(value) =>
-                  onSettingsChange({ ...settings, default_folder: value })
-                }
-              />
-            </div>
-            <p className="mt-1.5 text-[12px] text-stone leading-relaxed">
-              {t("settings.defaultFolder.describe")}
-            </p>
           </div>
 
           <div className="p-3 bg-coral-light/40 border border-coral/20 rounded-xl">

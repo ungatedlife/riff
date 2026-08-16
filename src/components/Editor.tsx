@@ -448,7 +448,6 @@ const Editor = forwardRef<EditorRef, EditorProps>(
               return results.slice(0, 8).map((r) => ({
                 slug: filenameToSlug(r.filename),
                 path: r.path,
-                folder: r.folder,
               }));
             } catch {
               return [];

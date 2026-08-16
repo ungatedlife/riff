@@ -8,7 +8,7 @@ mod tray;
 mod windows;
 
 use commands::index::NoteIndex;
-use commands::{cursor_positions, file_watcher, folders, index, notes, settings, share};
+use commands::{cursor_positions, file_watcher, index, notes, settings, share, storage};
 use shortcuts::shortcut_to_string;
 use state::AppState;
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
@@ -57,11 +57,11 @@ fn main() {
 
                         if let Some(action) = action {
                             match action.as_str() {
-                                "search" => {
-                                    show_command_palette(app);
+                                "summon" => {
+                                    show_main(app);
                                     return;
                                 }
-                                "manager" => {
+                                "search" => {
                                     show_command_palette(app);
                                     return;
                                 }
@@ -83,18 +83,6 @@ fn main() {
                         for (_, window) in app.webview_windows() {
                             window.open_devtools();
                         }
-                        return;
-                    }
-
-                    let state = app.state::<AppState>();
-                    let map = state
-                        .shortcut_to_folder
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner());
-                    let key = shortcut_to_string(shortcut);
-
-                    if let Some(folder) = map.get(&key) {
-                        show_main(app, folder);
                     }
                 })
                 .build(),
@@ -107,16 +95,10 @@ fn main() {
             notes::list_notes,
             notes::search_notes,
             notes::delete_note,
-            notes::move_note,
             notes::get_note_content,
             notes::save_note_image,
             notes::save_note_image_from_path,
-            folders::list_folders,
-            folders::create_folder,
-            folders::delete_folder,
-            folders::rename_folder,
-            folders::get_folder_stats,
-            folders::get_notes_directory,
+            storage::get_drafts_directory,
             index::rebuild_index,
             settings::get_settings,
             settings::save_settings,

@@ -21,7 +21,7 @@ import {
 import { RangeSetBuilder } from "@codemirror/state";
 
 export interface WikiLinkCallbacks {
-  onSearch: (query: string) => Promise<{ slug: string; path: string; folder: string }[]>;
+  onSearch: (query: string) => Promise<{ slug: string; path: string }[]>;
   onClick: (slug: string, path: string) => void;
 }
 
@@ -128,7 +128,6 @@ export function wikiLinkCompletionSource(
 
       const options: Completion[] = results.map((r) => ({
         label: r.slug,
-        detail: r.folder,
         apply: (view: EditorView, _completion: Completion, fromPos: number, toPos: number) => {
           // Replace from [[ to cursor with [[slug]]
           const replacement = `[[${r.slug}]]`;

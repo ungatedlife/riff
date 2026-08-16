@@ -61,7 +61,7 @@ fn remember_last_note(state: &AppState, path: &str) {
     });
 }
 
-pub fn show_main(app: &AppHandle, folder: &str) {
+pub fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if let Ok(s) = settings::load_settings_from_file() {
             // Restore persisted window size
@@ -84,7 +84,7 @@ pub fn show_main(app: &AppHandle, folder: &str) {
         }
         let _ = window.show();
         let _ = window.set_focus();
-        let _ = window.emit("shortcut-triggered", folder);
+        let _ = window.emit("shortcut-triggered", ());
     }
 }
 

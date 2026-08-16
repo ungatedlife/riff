@@ -18,10 +18,10 @@ pub fn start(app: AppHandle) {
         return; // already running
     }
 
-    let root = match super::folders::get_stik_folder() {
+    let root = match super::storage::notes_root() {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("file_watcher: cannot resolve stik root: {}", e);
+            eprintln!("file_watcher: cannot resolve drafts root: {}", e);
             return;
         }
     };

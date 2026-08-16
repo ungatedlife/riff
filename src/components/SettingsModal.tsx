@@ -132,7 +132,6 @@ export default function SettingsModal({
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const [settings, setSettings] = useState<StikSettings | null>(null);
-  const [folders, setFolders] = useState<string[]>([]);
   const [appVersion, setAppVersion] = useState("");
   const betaLabel = channelLabel(appVersion);
 
@@ -141,8 +140,7 @@ export default function SettingsModal({
   useEffect(() => {
     if (isOpen) {
       invoke<StikSettings>("get_settings").then(setSettings);
-      invoke<string[]>("list_folders").then(setFolders);
-      invoke<string>("get_notes_directory")
+      invoke<string>("get_drafts_directory")
         .then(setResolvedNotesDir)
         .catch(() => {});
       getVersion()
@@ -158,14 +156,14 @@ export default function SettingsModal({
     };
   }, []);
 
-  const prevNotesDir = useRef(settings?.notes_directory ?? "");
+  const prevDraftsDir = useRef(settings?.drafts_dir ?? "");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPendingRef = useRef(false);
 
-  // Track the notes_directory at load time so we can detect changes on save
+  // Track the drafts_dir at load time so we can detect changes on save
   useEffect(() => {
     if (settings) {
-      prevNotesDir.current = settings.notes_directory;
+      prevDraftsDir.current = settings.drafts_dir ?? "";
     }
     // Only on initial load
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -182,11 +180,11 @@ export default function SettingsModal({
         hide: settingsToSave.hide_tray_icon ?? false,
       });
 
-      if (settingsToSave.notes_directory !== prevNotesDir.current) {
+      if ((settingsToSave.drafts_dir ?? "") !== prevDraftsDir.current) {
         await invoke("rebuild_index");
-        const newDir = await invoke<string>("get_notes_directory");
+        const newDir = await invoke<string>("get_drafts_directory");
         setResolvedNotesDir(newDir);
-        prevNotesDir.current = settingsToSave.notes_directory;
+        prevDraftsDir.current = settingsToSave.drafts_dir ?? "";
       }
 
       await emit("settings-changed", settingsToSave);
@@ -264,7 +262,6 @@ export default function SettingsModal({
     <SettingsContent
       activeTab={activeTab}
       settings={settings}
-      folders={folders}
       onSettingsChange={handleSettingsChange}
       resolvedNotesDir={resolvedNotesDir}
     />

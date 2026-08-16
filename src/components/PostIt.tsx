@@ -9,7 +9,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import Editor, { type EditorRef } from "./Editor";
-import FolderPicker from "./FolderPicker";
 import type { StikSettings } from "@/types";
 import type { VimMode } from "@/extensions/cm-vim";
 import {
@@ -28,20 +27,13 @@ import {
   resolveImagePaths,
   unresolveImagePaths,
 } from "@/utils/imageMarkdownPaths";
-import { resolveCaptureFolder } from "@/utils/folderSelection";
-import { getFolderColor } from "@/utils/folderColors";
 import { formatShortcutDisplay } from "./ShortcutRecorder";
 import { loadGoogleFont, loadCustomFont } from "@/utils/fonts";
 import { useTranslation } from "@/hooks/useTranslation";
 
 interface PostItProps {
-  folder: string;
-  onSave: (
-    content: string,
-    preferredFolder?: string,
-  ) => Promise<string | undefined | void>;
+  onSave: (content: string) => Promise<string | undefined | void>;
   onClose: () => void;
-  onFolderChange: (folder: string) => void;
   onOpenSettings?: () => void;
   onContentChange?: (content: string) => void;
 }
@@ -86,10 +78,8 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
 }
 
 export default function PostIt({
-  folder,
   onSave,
   onClose,
-  onFolderChange,
   onOpenSettings,
   onContentChange,
 }: PostItProps) {
@@ -97,7 +87,6 @@ export default function PostIt({
   const [content, setContent] = useState("");
   // Path of the draft currently loaded into the room; null = fresh riff.
   const [currentDraftPath, setCurrentDraftPath] = useState<string | null>(null);
-  const [showPicker, setShowPicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
   const [isCopyMenuOpen, setIsCopyMenuOpen] = useState(false);
@@ -109,7 +98,6 @@ export default function PostIt({
   const [customFonts, setCustomFonts] = useState<
     import("@/types").CustomFontEntry[]
   >([]);
-  const [folderColors, setFolderColors] = useState<Record<string, string>>({});
   const [systemShortcuts, setSystemShortcuts] = useState<
     Record<string, string>
   >({});
@@ -130,7 +118,6 @@ export default function PostIt({
   const commandInputRef = useRef<HTMLInputElement | null>(null);
   const editorRef = useRef<EditorRef | null>(null);
   const copyMenuRef = useRef<HTMLDivElement | null>(null);
-  const foldersRef = useRef<string[]>([]);
   const contentRef = useRef(content);
   const cursorSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingCursorRef = useRef<{ head: number; anchor: number } | null>(
@@ -190,22 +177,6 @@ export default function PostIt({
       );
     }
   }, [fontFamily, customFonts]);
-
-  const resolveFolderForAction = useCallback(async (): Promise<string> => {
-    const folders = await invoke<string[]>("list_folders");
-    const settings = await invoke<StikSettings>("get_settings");
-    const resolved = resolveCaptureFolder({
-      requestedFolder: folder.trim(),
-      defaultFolder: settings.default_folder?.trim(),
-      availableFolders: folders,
-    });
-
-    if (resolved && resolved !== folder) {
-      onFolderChange(resolved);
-    }
-
-    return resolved;
-  }, [folder, onFolderChange]);
 
   // Load a draft into the room when the backend asks for it (palette,
   // wiki-link jump, Cmd+Shift+L, or a Finder-opened file).
@@ -268,17 +239,11 @@ export default function PostIt({
         setFontFamily(s.font_family ?? null);
         setWindowOpacity(s.window_opacity ?? 1.0);
         setCustomFonts(s.custom_fonts ?? []);
-        setFolderColors(s.folder_colors ?? {});
         setSystemShortcuts(s.system_shortcuts ?? {});
         setCustomTemplates(s.custom_templates ?? []);
         setTextDirection(
           (s.text_direction as "auto" | "ltr" | "rtl") || "auto",
         );
-      })
-      .catch(() => {});
-    invoke<string[]>("list_folders")
-      .then((f) => {
-        foldersRef.current = f;
       })
       .catch(() => {});
 
@@ -288,7 +253,6 @@ export default function PostIt({
       setFontFamily(event.payload.font_family ?? null);
       setWindowOpacity(event.payload.window_opacity ?? 1.0);
       setCustomFonts(event.payload.custom_fonts ?? []);
-      setFolderColors(event.payload.folder_colors ?? {});
       setSystemShortcuts(event.payload.system_shortcuts ?? {});
       setCustomTemplates(event.payload.custom_templates ?? []);
       setTextDirection(
@@ -300,11 +264,11 @@ export default function PostIt({
     };
   }, []);
 
-  // Focus editor on mount, when folder changes, or when editor becomes available after settings load
+  // Focus editor on mount, or when it becomes available after settings load
   useEffect(() => {
     if (vimEnabled === null) return; // editor not mounted yet
     setTimeout(() => editorRef.current?.focus(), 100);
-  }, [folder, vimEnabled]);
+  }, [vimEnabled]);
 
   // Flush pending cursor save immediately (used on blur / before close)
   const flushCursorSave = useCallback(() => {
@@ -383,7 +347,6 @@ export default function PostIt({
     const view = editorRef.current?.getView();
     if (view) closeCompletion(view);
     flushSync(() => {
-      setShowPicker(false);
       setContent("");
       onContentChange?.("");
     });
@@ -391,13 +354,10 @@ export default function PostIt({
     contentRef.current = "";
   }, [onContentChange]);
 
-  // New shortcut-triggered session: reset transient slash/folder-picker state,
-  // and detach from any open draft when the editor is empty (fresh riff).
+  // New shortcut-triggered session: reset transient slash state, and detach
+  // from any open draft when the editor is empty (fresh riff).
   useEffect(() => {
     const unlisten = listen("shortcut-triggered", () => {
-      flushSync(() => {
-        setShowPicker(false);
-      });
       clearTransientSlashQuery();
       if (isMarkdownEffectivelyEmpty(contentRef.current)) {
         setCurrentDraftPath(null);
@@ -418,9 +378,6 @@ export default function PostIt({
   useEffect(() => {
     const handleWindowFocus = () => {
       if (isSaving || vimMode === "command") return;
-      // Reset folder picker on focus to clear stale state from sessions
-      // hidden by blur-auto-hide (which skips handleSaveAndClose).
-      setShowPicker(false);
       setTimeout(() => editorRef.current?.focus(), 50);
     };
     window.addEventListener("focus", handleWindowFocus);
@@ -457,7 +414,6 @@ export default function PostIt({
       flushSync(() => {
         setContent("");
         onContentChange?.("");
-        setShowPicker(false);
       });
       editorRef.current?.clear();
       contentRef.current = "";
@@ -476,8 +432,7 @@ export default function PostIt({
         });
         savedPath = currentDraftPath;
       } else {
-        const targetFolder = await resolveFolderForAction();
-        savedPath = (await onSave(currentContent, targetFolder)) || undefined;
+        savedPath = (await onSave(currentContent)) || undefined;
       }
 
       // Save cursor position under the note's file path so Cmd+Shift+L
@@ -502,14 +457,7 @@ export default function PostIt({
       setIsSaving(false);
       setToast(t("postit.saveFailed"));
     }
-  }, [
-    currentDraftPath,
-    onSave,
-    onClose,
-    onContentChange,
-    resolveFolderForAction,
-    getLiveContent,
-  ]);
+  }, [currentDraftPath, onSave, onClose, onContentChange, getLiveContent]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -538,21 +486,13 @@ export default function PostIt({
         return;
       }
 
-      // Dismiss folder picker on Escape — next Escape will save/close.
-      // Guard: only when CM6 hasn't already handled this Escape (autocomplete close).
-      if (showPicker && !e.defaultPrevented && !isAutocompleteOpen) {
-        setShowPicker(false);
-        editorRef.current?.focus();
-        return;
-      }
-
       if (
         shouldSaveOnGlobalEscape({
           defaultPrevented: e.defaultPrevented,
           inLinkPopover,
           isCopyMenuOpen,
           isAutocompleteOpen,
-          showPicker,
+          showPicker: false,
           isSaving,
           isPinning: false,
         })
@@ -563,7 +503,7 @@ export default function PostIt({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showPicker, isSaving, isCopyMenuOpen, vimEnabled, handleSaveAndClose]);
+  }, [isSaving, isCopyMenuOpen, vimEnabled, handleSaveAndClose]);
 
   // Zen mode shortcut (reads from settings, defaults to Cmd+.)
   useEffect(() => {
@@ -724,10 +664,8 @@ export default function PostIt({
         setIsCopying(false);
       }
     },
-    [content, folder, isCopying, copyPlainText, showToast],
+    [content, isCopying, copyPlainText, showToast],
   );
-
-  const hasValidFolder = folder.trim().length > 0;
 
   const handleContentChange = useCallback(
     (newContent: string) => {
@@ -736,18 +674,12 @@ export default function PostIt({
       contentRef.current = stored;
       onContentChange?.(stored);
 
-      // Check for folder picker trigger. Slash commands take priority.
-      // Only show folder picker when the typed prefix doesn't match any
-      // command AND matches at least one folder name.
+      // Slash-command autocomplete trigger.
       if (isCaptureSlashQuery(newContent)) {
         const query = newContent.slice(1).toLowerCase();
         const matchesSlashCmd =
           query === "" ||
           getSlashCommandNames().some((cmd) => cmd.startsWith(query));
-        const matchesFolder =
-          query.length > 0 &&
-          foldersRef.current.some((f) => f.toLowerCase().includes(query));
-        setShowPicker(!matchesSlashCmd && matchesFolder);
 
         // Ensure CM6 autocomplete activates for slash commands.
         // After a close+clear+reopen cycle, CM6's "explicitly closed" state
@@ -766,8 +698,6 @@ export default function PostIt({
             }
           }, 0);
         }
-      } else {
-        setShowPicker(false);
       }
     },
     [],
@@ -794,7 +724,6 @@ export default function PostIt({
     setContent("");
     contentRef.current = "";
     onContentChange?.("");
-    setShowPicker(false);
     editorRef.current?.clear();
     editorRef.current?.setVimMode("normal");
     setVimCommand("");
@@ -873,25 +802,6 @@ export default function PostIt({
       window.removeEventListener("keydown", handleVimCommandTrigger, true);
   }, [vimEnabled, vimMode]);
 
-  const handleFolderSelect = useCallback(
-    (selectedFolder: string) => {
-      onFolderChange(selectedFolder);
-      setShowPicker(false);
-
-      // Only clear content if it was a slash-command query (e.g. "/Work"),
-      // not real note content the user typed before clicking the folder badge
-      const isSlashQuery = isCaptureSlashQuery(content);
-      if (isSlashQuery) {
-        setContent("");
-        onContentChange?.("");
-        editorRef.current?.clear();
-      }
-
-      editorRef.current?.focus();
-    },
-    [onFolderChange, content, onContentChange],
-  );
-
   const startDrag = useCallback(async (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
     try {
@@ -964,8 +874,7 @@ export default function PostIt({
               content: currentContent,
             });
           } else {
-            const targetFolder = await resolveFolderForAction();
-            await onSave(currentContent, targetFolder);
+            await onSave(currentContent);
           }
         }
         await invoke("open_draft", { path });
@@ -973,7 +882,7 @@ export default function PostIt({
         console.error("Failed to open wiki-linked note:", error);
       }
     },
-    [currentDraftPath, getLiveContent, onSave, resolveFolderForAction],
+    [currentDraftPath, getLiveContent, onSave],
   );
 
   // Handle image paste/drop: save to disk and return asset URL for the editor
@@ -988,7 +897,6 @@ export default function PostIt({
         });
 
         const [absPath] = await invoke<[string, string]>("save_note_image", {
-          folder,
           imageData: base64,
         });
 
@@ -998,7 +906,7 @@ export default function PostIt({
         return null;
       }
     },
-    [folder],
+    [],
   );
 
   const handleImageDropPath = useCallback(
@@ -1007,7 +915,6 @@ export default function PostIt({
         const [absPath] = await invoke<[string, string]>(
           "save_note_image_from_path",
           {
-            folder,
             filePath: path,
           },
         );
@@ -1018,7 +925,7 @@ export default function PostIt({
         return null;
       }
     },
-    [folder],
+    [],
   );
 
   // Show save animation
@@ -1072,26 +979,7 @@ export default function PostIt({
         >
           {!zenMode && (
             <>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowPicker(!showPicker)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-pill text-[11px] font-semibold transition-colors hover:opacity-80 ${
-                    hasValidFolder
-                      ? `${getFolderColor(folder, folderColors).badgeBg} ${getFolderColor(folder, folderColors).badgeText}`
-                      : "bg-line text-stone"
-                  }`}
-                >
-                  <span
-                    className="text-[8px]"
-                    style={{ color: getFolderColor(folder, folderColors).dot }}
-                  >
-                    ●
-                  </span>
-                  <span>{folder || "Stik"}</span>
-                  <span className="text-[8px] opacity-50">▼</span>
-                </button>
-
-              </div>
+              <div className="flex items-center gap-2" />
 
               <div
                 data-capture-hide
@@ -1177,19 +1065,6 @@ export default function PostIt({
               onCursorChange={handleCursorChange}
             />
           )}
-
-          {/* Folder Picker */}
-          {showPicker && !zenMode && (
-            <FolderPicker
-              query={content.startsWith("/") ? content.slice(1) : ""}
-              onSelect={handleFolderSelect}
-              onClose={() => {
-                setShowPicker(false);
-                editorRef.current?.focus();
-              }}
-              folderColors={folderColors}
-            />
-          )}
         </div>
 
         {/* Footer - draggable (or command bar when vim command mode) */}
@@ -1245,12 +1120,7 @@ export default function PostIt({
             >
               <span className="flex items-center gap-2 font-mono text-stone">
                 <span>
-                  <span className="text-coral">~</span>/Stik/
-                  {folder && (
-                    <>
-                      <span className="text-coral">{folder}</span>/
-                    </>
-                  )}
+                  <span className="text-coral">~</span>/Riff/
                 </span>
               </span>
               <div className="flex items-center gap-2">

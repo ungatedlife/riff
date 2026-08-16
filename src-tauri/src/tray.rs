@@ -1,4 +1,3 @@
-use crate::commands::settings;
 use crate::windows::show_main;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
@@ -22,8 +21,7 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                 app.exit(0);
             }
             "new_note" => {
-                let settings = settings::get_settings().unwrap_or_default();
-                show_main(app, &settings.default_folder);
+                show_main(app);
             }
             _ => {}
         })

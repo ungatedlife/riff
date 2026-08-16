@@ -1,6 +1,5 @@
 pub mod cursor_positions;
 pub mod file_watcher;
-pub mod folders;
 pub mod index;
 pub mod notes;
 pub mod settings;

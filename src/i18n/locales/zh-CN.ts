@@ -349,6 +349,7 @@ export const zhCN: Translations = {
   "palette.fromFolder": "来自：{folder}",
   "dictation.firstLoadHigh": "“高质量”模型首次加载最多需要 2 分钟，只会发生一次，之后启动都是瞬时的。",
   "dictation.modelListFailed": "无法加载模型列表：{error}",
+  "shortcut.summon": "新建即兴笔记",
   "shortcut.search": "命令面板",
   "shortcut.manager": "命令面板（备用）",
   "shortcut.settings": "设置",

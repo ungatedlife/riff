@@ -4,7 +4,6 @@ import {
   normalizeNoteTitle,
   normalizeNoteSnippet,
 } from "@/utils/notePresentation";
-import { getFolderColor } from "@/utils/folderColors";
 import { useTranslation } from "@/hooks/useTranslation";
 
 interface NoteListProps {
@@ -12,8 +11,6 @@ interface NoteListProps {
   selectedIndex: number;
   query: string;
   isSearching: boolean;
-  folderColors: Record<string, string>;
-  focused: boolean;
   resultsRef: React.RefObject<HTMLDivElement | null>;
   onSelectResult: (result: SearchResult) => void;
   onSetSelectedIndex: (index: number) => void;
@@ -22,8 +19,6 @@ interface NoteListProps {
   onSetNewNoteTitle: (title: string) => void;
   onCreateNote: () => void;
   onCancelCreateNote: () => void;
-  selectedFolder: string | null;
-  folders: string[];
 }
 
 function highlightSnippet(snippet: string, searchQuery: string) {
@@ -46,8 +41,6 @@ export default function NoteList({
   selectedIndex,
   query,
   isSearching,
-  folderColors,
-  focused,
   resultsRef,
   onSelectResult,
   onSetSelectedIndex,
@@ -56,8 +49,6 @@ export default function NoteList({
   onSetNewNoteTitle,
   onCreateNote,
   onCancelCreateNote,
-  selectedFolder,
-  folders,
 }: NoteListProps) {
   const { t } = useTranslation();
   const hasQuery = query.trim().length > 0;
@@ -71,8 +62,6 @@ export default function NoteList({
       </div>
     );
   }
-
-  const targetFolder = selectedFolder || folders[0] || "";
 
   return (
     <div ref={resultsRef} className="flex-1 overflow-y-auto">
@@ -112,11 +101,6 @@ export default function NoteList({
               }}
             />
           </div>
-          <div className="mt-1 ml-6 text-[10px] text-stone">
-            {t("palette.inFolder")}{" "}
-            <span className="text-coral font-medium">{targetFolder}</span> —{" "}
-            {t("palette.createHint")}
-          </div>
         </div>
       )}
 
@@ -138,8 +122,7 @@ export default function NoteList({
           hasQuery &&
           displaySnippet.length > 0 &&
           displaySnippet !== displayTitle;
-        const color = getFolderColor(result.folder, folderColors);
-        const isSelected = index === selectedIndex && focused;
+        const isSelected = index === selectedIndex;
 
         return (
           <button
@@ -150,16 +133,9 @@ export default function NoteList({
               isSelected ? "bg-coral/10" : "hover:bg-line/30"
             }`}
           >
-            <div className="flex items-center gap-2">
-              <p className="flex-1 text-[14px] font-medium leading-relaxed truncate text-ink">
-                {displayTitle}
-              </p>
-              <span
-                className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold ${color.badgeBg} ${color.badgeText}`}
-              >
-                {result.folder}
-              </span>
-            </div>
+            <p className="text-[14px] font-medium leading-relaxed truncate text-ink">
+              {displayTitle}
+            </p>
             <span className="text-[10px] text-stone font-mono">
               {formatRelativeDate(result.created)}
             </span>

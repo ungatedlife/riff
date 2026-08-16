@@ -1,36 +1,34 @@
-/// Local filesystem storage for notes.
+/// Local filesystem storage for drafts.
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
 use super::settings;
 
-/// Get the root notes directory.
-/// When `use_directory_as_root` is enabled and a custom directory is set,
-/// the custom path is used directly without appending a subfolder.
-pub fn stik_root() -> Result<PathBuf, String> {
+/// Get the drafts directory: the configured `drafts_dir`, or ~/Documents/Riff.
+pub fn notes_root() -> Result<PathBuf, String> {
     let custom = settings::load_settings_from_file()
         .ok()
-        .filter(|s| !s.notes_directory.is_empty())
-        .and_then(|s| {
-            let p = PathBuf::from(&s.notes_directory);
-            if p.is_absolute() {
-                Some((p, s.use_directory_as_root))
-            } else {
-                None
-            }
-        });
+        .and_then(|s| s.drafts_dir)
+        .filter(|d| !d.is_empty())
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute());
 
     let path = match custom {
-        Some((dir, true)) => dir,
-        Some((dir, false)) => dir.join("Stik"),
+        Some(dir) => dir,
         None => {
             let docs = dirs::document_dir().ok_or("Could not find Documents directory")?;
-            docs.join("Stik")
+            docs.join("Riff")
         }
     };
     fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     Ok(path)
+}
+
+#[tauri::command]
+pub fn get_drafts_directory() -> Result<String, String> {
+    let path = notes_root()?;
+    Ok(path.to_string_lossy().to_string())
 }
 
 // ── File Operations ───────────────────────────────────────────────
@@ -51,10 +49,6 @@ pub fn delete_file(path: &str) -> Result<(), String> {
     fs::remove_file(path).map_err(|e| e.to_string())
 }
 
-pub fn move_file(src: &str, dst: &str) -> Result<(), String> {
-    fs::rename(src, dst).map_err(|e| e.to_string())
-}
-
 pub fn copy_file(src: &str, dst: &str) -> Result<(), String> {
     fs::copy(src, dst).map_err(|e| e.to_string())?;
     Ok(())
@@ -62,10 +56,6 @@ pub fn copy_file(src: &str, dst: &str) -> Result<(), String> {
 
 pub fn ensure_dir(path: &str) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| e.to_string())
-}
-
-pub fn remove_dir_all(path: &str) -> Result<(), String> {
-    fs::remove_dir_all(path).map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,8 +88,4 @@ pub fn list_dir(path: &str) -> Result<Vec<DirEntry>, String> {
 
 pub fn path_exists(path: &str) -> bool {
     PathBuf::from(path).exists()
-}
-
-pub fn is_dir(path: &str) -> bool {
-    PathBuf::from(path).is_dir()
 }

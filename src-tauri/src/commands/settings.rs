@@ -4,13 +4,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShortcutMapping {
-    pub shortcut: String,
-    pub folder: String,
-    pub enabled: bool,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CustomTemplate {
     pub name: String,
@@ -59,18 +52,15 @@ fn default_text_direction() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StikSettings {
-    pub shortcut_mappings: Vec<ShortcutMapping>,
-    pub default_folder: String,
     #[serde(default)]
     pub vim_mode_enabled: bool,
     #[serde(default)]
     pub theme_mode: String,
+    /// Absolute path of the drafts directory. None/empty = ~/Documents/Riff.
     #[serde(default)]
-    pub notes_directory: String,
+    pub drafts_dir: Option<String>,
     #[serde(default)]
     pub hide_dock_icon: bool,
-    #[serde(default)]
-    pub folder_colors: HashMap<String, String>,
     #[serde(default)]
     pub system_shortcuts: HashMap<String, String>,
     #[serde(default = "default_font_size")]
@@ -81,8 +71,6 @@ pub struct StikSettings {
     pub window_position: Option<(f64, f64)>,
     #[serde(default)]
     pub custom_templates: Vec<CustomTemplate>,
-    #[serde(default)]
-    pub sidebar_position: String,
     #[serde(default = "default_text_direction")]
     pub text_direction: String,
     #[serde(default)]
@@ -97,8 +85,6 @@ pub struct StikSettings {
     pub window_opacity: f64,
     #[serde(default)]
     pub custom_fonts: Vec<CustomFontEntry>,
-    #[serde(default)]
-    pub use_directory_as_root: bool,
     /// BCP-47 locale tag for the UI language ("en", "zh-CN").
     /// Empty string means "follow the system language".
     #[serde(default)]
@@ -108,41 +94,16 @@ pub struct StikSettings {
 impl Default for StikSettings {
     fn default() -> Self {
         Self {
-            default_folder: "Inbox".to_string(),
             language: String::new(),
-            shortcut_mappings: vec![
-                ShortcutMapping {
-                    shortcut: "CommandOrControl+Shift+S".to_string(),
-                    folder: "Inbox".to_string(),
-                    enabled: true,
-                },
-                ShortcutMapping {
-                    shortcut: "CommandOrControl+Shift+1".to_string(),
-                    folder: "Work".to_string(),
-                    enabled: true,
-                },
-                ShortcutMapping {
-                    shortcut: "CommandOrControl+Shift+2".to_string(),
-                    folder: "Ideas".to_string(),
-                    enabled: true,
-                },
-                ShortcutMapping {
-                    shortcut: "CommandOrControl+Shift+3".to_string(),
-                    folder: "Personal".to_string(),
-                    enabled: true,
-                },
-            ],
             vim_mode_enabled: false,
             theme_mode: String::new(),
-            notes_directory: String::new(),
+            drafts_dir: None,
             hide_dock_icon: false,
-            folder_colors: HashMap::new(),
             system_shortcuts: default_system_shortcuts(),
             font_size: 14,
             window_size: None,
             window_position: None,
             custom_templates: vec![],
-            sidebar_position: String::new(),
             text_direction: "auto".to_string(),
             hide_tray_icon: false,
             active_theme: String::new(),
@@ -150,15 +111,14 @@ impl Default for StikSettings {
             font_family: None,
             window_opacity: 1.0,
             custom_fonts: vec![],
-            use_directory_as_root: false,
         }
     }
 }
 
 pub fn default_system_shortcuts() -> HashMap<String, String> {
     HashMap::from([
+        ("summon".to_string(), "Cmd+Shift+R".to_string()),
         ("search".to_string(), "Cmd+Shift+P".to_string()),
-        ("manager".to_string(), "Cmd+Shift+M".to_string()),
         ("settings".to_string(), "Cmd+Shift+Comma".to_string()),
         ("last_note".to_string(), "Cmd+Shift+L".to_string()),
         ("zen_mode".to_string(), "Cmd+Period".to_string()),
@@ -203,12 +163,6 @@ fn is_valid_active_theme(active_theme: &str, custom_themes: &[CustomThemeDefinit
 }
 
 fn normalize_loaded_settings(mut settings: StikSettings) -> StikSettings {
-    // The UI has no enable/disable toggle — users delete shortcuts to remove them.
-    // Force all visible shortcuts to enabled so stale disabled state can't persist.
-    for mapping in &mut settings.shortcut_mappings {
-        mapping.enabled = true;
-    }
-
     normalize_system_shortcuts(&mut settings.system_shortcuts);
 
     if settings.active_theme.is_empty() && is_legacy_theme_mode(&settings.theme_mode) {
@@ -432,28 +386,7 @@ pub fn export_theme_file(
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_loaded_settings, parse_color_value, ShortcutMapping, StikSettings};
-
-    #[test]
-    fn normalization_reenables_all_disabled_shortcuts() {
-        let mut settings = StikSettings::default();
-        settings.shortcut_mappings = vec![
-            ShortcutMapping {
-                shortcut: "Cmd+Shift+S".to_string(),
-                folder: "Inbox".to_string(),
-                enabled: false,
-            },
-            ShortcutMapping {
-                shortcut: "Cmd+Shift+1".to_string(),
-                folder: "Work".to_string(),
-                enabled: false,
-            },
-        ];
-
-        let normalized = normalize_loaded_settings(settings);
-        assert!(normalized.shortcut_mappings[0].enabled);
-        assert!(normalized.shortcut_mappings[1].enabled);
-    }
+    use super::{normalize_loaded_settings, parse_color_value, StikSettings};
 
     #[test]
     fn normalization_falls_back_to_legacy_theme_mode_when_active_theme_is_invalid() {

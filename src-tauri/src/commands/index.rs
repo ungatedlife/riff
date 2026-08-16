@@ -7,7 +7,7 @@ use std::time::SystemTime;
 
 use chrono::{DateTime, Local};
 
-use super::folders::get_stik_folder;
+use super::storage::notes_root;
 
 const PREVIEW_LENGTH: usize = 150;
 const STALE_SECONDS: u64 = 60;
@@ -16,7 +16,6 @@ const STALE_SECONDS: u64 = 60;
 pub struct NoteEntry {
     pub path: String,
     pub filename: String,
-    pub folder: String,
     pub title: String,
     pub preview: String,
     pub created: String,
@@ -37,38 +36,15 @@ impl NoteIndex {
     }
 
     pub fn build(&self) -> Result<(), String> {
-        let stik_folder = get_stik_folder()?;
-        let stik_path = stik_folder.to_string_lossy();
+        let root = notes_root()?;
+        let root_str = root.to_string_lossy();
         let mut new_entries = HashMap::new();
 
-        let dir_entries = super::storage::list_dir(&stik_path)?;
-
-        // Index folders
-        for dir_entry in &dir_entries {
-            if !dir_entry.is_directory {
-                continue;
-            }
-            let folder_name = &dir_entry.name;
-            let folder_path = stik_folder.join(folder_name);
-            let folder_path_str = folder_path.to_string_lossy();
-
-            if let Ok(files) = super::storage::list_dir(&folder_path_str) {
-                for file in files {
-                    if !file.is_directory && file.name.ends_with(".md") {
-                        let path = folder_path.join(&file.name);
-                        if let Some(note_entry) = read_note_entry(&path, folder_name) {
-                            new_entries.insert(note_entry.path.clone(), note_entry);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Index root-level .md files (no folder)
-        for dir_entry in &dir_entries {
+        // Drafts live flat in the root directory.
+        for dir_entry in super::storage::list_dir(&root_str)? {
             if !dir_entry.is_directory && dir_entry.name.ends_with(".md") {
-                let path = stik_folder.join(&dir_entry.name);
-                if let Some(note_entry) = read_note_entry(&path, "") {
+                let path = root.join(&dir_entry.name);
+                if let Some(note_entry) = read_note_entry(&path) {
                     new_entries.insert(note_entry.path.clone(), note_entry);
                 }
             }
@@ -97,10 +73,9 @@ impl NoteIndex {
         Ok(())
     }
 
-    pub fn add(&self, path: &str, folder: &str) {
+    pub fn add(&self, path: &str) {
         let note_path = PathBuf::from(path);
-        let folder_name = folder.to_string();
-        if let Some(entry) = read_note_entry(&note_path, &folder_name) {
+        if let Some(entry) = read_note_entry(&note_path) {
             let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
             entries.insert(entry.path.clone(), entry);
         }
@@ -111,24 +86,9 @@ impl NoteIndex {
         entries.remove(path);
     }
 
-    pub fn remove_by_folder(&self, folder: &str) {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        entries.retain(|_, e| e.folder != folder);
-    }
-
-    pub fn move_entry(&self, old_path: &str, new_path: &str, new_folder: &str) {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(mut entry) = entries.remove(old_path) {
-            entry.path = new_path.to_string();
-            entry.folder = new_folder.to_string();
-            entries.insert(new_path.to_string(), entry);
-        }
-    }
-
-    /// Handle external changes from iCloud sync — re-index specific paths.
-    /// Called when DarwinKit pushes icloud.files_changed notifications.
+    /// Handle external changes reported by the file watcher.
     pub fn notify_external_change(&self, paths: &[String]) {
-        let stik_folder = match get_stik_folder() {
+        let root = match notes_root() {
             Ok(f) => f,
             Err(_) => return,
         };
@@ -138,30 +98,13 @@ impl NoteIndex {
         for path_str in paths {
             let path = PathBuf::from(path_str);
 
-            // Only index .md files within the Stik root
-            if !path.starts_with(&stik_folder) || !path_str.ends_with(".md") {
+            // Only direct .md children of the drafts root are indexed.
+            if path.parent() != Some(root.as_path()) || !path_str.ends_with(".md") {
                 continue;
             }
 
-            // Extract folder name from path
-            let folder = path
-                .strip_prefix(&stik_folder)
-                .ok()
-                .and_then(|rel| rel.components().next())
-                .and_then(|c| {
-                    let name = c.as_os_str().to_string_lossy().to_string();
-                    // If it's the file itself (root-level), return empty
-                    if name.ends_with(".md") {
-                        None
-                    } else {
-                        Some(name)
-                    }
-                })
-                .unwrap_or_default();
-
-            // Try to re-index — if file was deleted, remove from index
             if super::storage::path_exists(path_str) {
-                if let Some(entry) = read_note_entry(&path, &folder) {
+                if let Some(entry) = read_note_entry(&path) {
                     entries.insert(entry.path.clone(), entry);
                 }
             } else {
@@ -170,25 +113,16 @@ impl NoteIndex {
         }
     }
 
-    pub fn list(&self, folder: Option<&str>) -> Result<Vec<NoteEntry>, String> {
+    pub fn list(&self) -> Result<Vec<NoteEntry>, String> {
         self.ensure_fresh()?;
         let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
 
-        let mut result: Vec<NoteEntry> = entries
-            .values()
-            .filter(|e| folder.map_or(true, |f| e.folder == f))
-            .cloned()
-            .collect();
-
+        let mut result: Vec<NoteEntry> = entries.values().cloned().collect();
         result.sort_by(|a, b| b.created.cmp(&a.created));
         Ok(result)
     }
 
-    pub fn search(
-        &self,
-        query: &str,
-        folder: Option<&str>,
-    ) -> Result<Vec<(NoteEntry, String)>, String> {
+    pub fn search(&self, query: &str) -> Result<Vec<(NoteEntry, String)>, String> {
         self.ensure_fresh()?;
         let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
         let query_lower = query.to_lowercase();
@@ -196,12 +130,6 @@ impl NoteIndex {
         let mut results: Vec<(NoteEntry, String)> = Vec::new();
 
         for entry in entries.values() {
-            if let Some(f) = folder {
-                if entry.folder != f {
-                    continue;
-                }
-            }
-
             let preview_lower = entry.preview.to_lowercase();
             if preview_lower.contains(&query_lower) {
                 let snippet = extract_snippet(&entry.preview, query, 100);
@@ -228,7 +156,7 @@ pub fn rebuild_index(index: tauri::State<'_, NoteIndex>) -> Result<bool, String>
     Ok(true)
 }
 
-fn read_note_entry(path: &PathBuf, folder: &str) -> Option<NoteEntry> {
+fn read_note_entry(path: &PathBuf) -> Option<NoteEntry> {
     let path_str = path.to_string_lossy();
     let content = super::storage::read_file(&path_str).ok()?;
 
@@ -258,7 +186,6 @@ fn read_note_entry(path: &PathBuf, folder: &str) -> Option<NoteEntry> {
     Some(NoteEntry {
         path: path.to_string_lossy().to_string(),
         filename,
-        folder: folder.to_string(),
         title,
         preview,
         created,
@@ -366,13 +293,13 @@ mod tests {
             .expect("clock should be after unix epoch")
             .as_nanos();
 
-        let test_dir = std::env::temp_dir().join(format!("stik-index-test-{}", unique));
+        let test_dir = std::env::temp_dir().join(format!("riff-index-test-{}", unique));
         fs::create_dir_all(&test_dir).expect("create temp test dir");
 
         let note_path: PathBuf = test_dir.join("20000101-000000-legacy-title.md");
         fs::write(&note_path, "updated content").expect("write note");
 
-        let entry = read_note_entry(&note_path, "Inbox").expect("note entry should load");
+        let entry = read_note_entry(&note_path).expect("note entry should load");
         assert_ne!(entry.created, "20000101-000000");
 
         let _ = fs::remove_file(&note_path);
