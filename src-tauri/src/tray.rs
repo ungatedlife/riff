@@ -1,5 +1,5 @@
 use crate::commands::settings;
-use crate::windows::show_postit_with_folder;
+use crate::windows::show_main;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -23,7 +23,7 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
             }
             "new_note" => {
                 let settings = settings::get_settings().unwrap_or_default();
-                show_postit_with_folder(app, &settings.default_folder);
+                show_main(app, &settings.default_folder);
             }
             _ => {}
         })

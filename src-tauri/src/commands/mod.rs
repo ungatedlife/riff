@@ -5,6 +5,5 @@ pub mod index;
 pub mod notes;
 pub mod settings;
 pub mod share;
-pub mod sticked_notes;
 pub mod storage;
 pub mod versioning;

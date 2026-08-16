@@ -133,7 +133,6 @@ pub fn post_save_processing(app: &AppHandle, result: &NoteSaved, _content: &str)
         .unwrap_or_else(|e: std::sync::PoisonError<_>| e.into_inner());
     *last = Some(LastSavedNote {
         path: result.path.clone(),
-        folder: result.folder.clone(),
     });
 }
 

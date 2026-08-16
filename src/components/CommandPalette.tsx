@@ -220,14 +220,7 @@ export default function CommandPalette() {
   const openNote = useCallback(
     async (result: SearchResult) => {
       try {
-        const content = await invoke<string>("get_note_content", {
-          path: result.path,
-        });
-        await invoke("open_note_for_viewing", {
-          content,
-          folder: result.folder,
-          path: result.path,
-        });
+        await invoke("open_draft", { path: result.path });
         closePalette();
       } catch (error) {
         console.error("Failed to open note:", error);
@@ -454,25 +447,16 @@ export default function CommandPalette() {
 
     try {
       const content = `# ${title}\n\n`;
-      await invoke("save_note", { folder: targetFolder, content });
+      const result = await invoke<{ path: string }>("save_note", {
+        folder: targetFolder,
+        content,
+      });
       setIsCreatingNote(false);
       setNewNoteTitle("");
       await refreshAfterChange();
 
-      // Open the newly created note (it's the most recent one)
-      const notes = await invoke<NoteInfo[]>("list_notes", {
-        folder: targetFolder,
-      });
-      if (notes.length > 0) {
-        const newest = notes[0];
-        const noteContent = await invoke<string>("get_note_content", {
-          path: newest.path,
-        });
-        await invoke("open_note_for_viewing", {
-          content: noteContent,
-          folder: newest.folder,
-          path: newest.path,
-        });
+      if (result.path) {
+        await invoke("open_draft", { path: result.path });
         closePalette();
       }
     } catch (error) {

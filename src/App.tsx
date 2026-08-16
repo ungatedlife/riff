@@ -6,25 +6,17 @@ import PostIt from "./components/PostIt";
 import SettingsModal from "./components/SettingsModal";
 import CommandPalette from "./components/CommandPalette";
 import { useTheme } from "./hooks/useTheme";
-import type { StickedNote, StikSettings } from "@/types";
+import type { StikSettings } from "@/types";
 import { isMarkdownEffectivelyEmpty } from "@/utils/normalizeMarkdownForCopy";
 import { shouldHideCaptureOnBlur } from "@/utils/blurAutoHide";
 import { resolveCaptureFolder } from "@/utils/folderSelection";
-import { useLanguageSync, useTranslation } from "@/hooks/useTranslation";
+import { useLanguageSync } from "@/hooks/useTranslation";
 
-type WindowType = "postit" | "sticked" | "settings" | "command-palette";
+type WindowType = "main" | "settings" | "command-palette";
 
-function getWindowInfo(): { type: WindowType; id?: string; viewing?: boolean } {
+function getWindowInfo(): { type: WindowType } {
   const params = new URLSearchParams(window.location.search);
   const windowType = params.get("window");
-
-  if (windowType === "sticked") {
-    return {
-      type: "sticked",
-      id: params.get("id") || undefined,
-      viewing: params.get("viewing") === "true",
-    };
-  }
 
   if (windowType === "settings") {
     return { type: "settings" };
@@ -38,16 +30,13 @@ function getWindowInfo(): { type: WindowType; id?: string; viewing?: boolean } {
     return { type: "command-palette" };
   }
 
-  return { type: "postit" };
+  return { type: "main" };
 }
 
 export default function App() {
   useTheme();
   useLanguageSync();
-  const { t } = useTranslation();
   const [currentFolder, setCurrentFolder] = useState("");
-  const [stickedNote, setStickedNote] = useState<StickedNote | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const contentRef = useRef("");
   const blurIgnoreUntilRef = useRef(0);
   const pendingBlurHideRef = useRef<number | null>(null);
@@ -68,9 +57,9 @@ export default function App() {
     [],
   );
 
-  // Initialize capture window with a valid folder (requested/default/fallback).
+  // Initialize the writing room with a valid folder (requested/default/fallback).
   useEffect(() => {
-    if (windowInfo.type !== "postit") return;
+    if (windowInfo.type !== "main") return;
 
     let cancelled = false;
 
@@ -94,56 +83,9 @@ export default function App() {
     };
   }, [windowInfo.type, resolveFolder]);
 
-  // Load sticked note data if this is a sticked window
+  // Hide the room on blur only when the editor is empty
   useEffect(() => {
-    if (windowInfo.type !== "sticked" || !windowInfo.id) return;
-
-    // If viewing mode, fetch content via command
-    if (windowInfo.viewing) {
-      const fetchViewingContent = async () => {
-        try {
-          const data = await invoke<{
-            id: string;
-            content: string;
-            folder: string;
-            path: string;
-          }>("get_viewing_note_content", { id: windowInfo.id });
-          setStickedNote({
-            id: data.id,
-            content: data.content,
-            folder: data.folder,
-            position: null,
-            size: null,
-            created_at: "",
-            updated_at: "",
-            originalPath: data.path,
-          });
-          setCurrentFolder(data.folder);
-        } catch (error) {
-          console.error("Failed to load viewing note content:", error);
-          setLoadError(String(error));
-        }
-      };
-
-      fetchViewingContent();
-      return;
-    }
-
-    // Regular sticked note - load from storage
-    invoke<StickedNote>("get_sticked_note", { id: windowInfo.id })
-      .then((note) => {
-        setStickedNote(note);
-        setCurrentFolder(note.folder);
-      })
-      .catch((error) => {
-        console.error("Failed to load sticked note:", error);
-        setLoadError(String(error));
-      });
-  }, [windowInfo.type, windowInfo.id, windowInfo.viewing]);
-
-  // Hide postit on blur only when editor is empty
-  useEffect(() => {
-    if (windowInfo.type !== "postit") return;
+    if (windowInfo.type !== "main") return;
 
     const handleFocus = () => {
       // Use Math.max so a focus event arriving after shortcut-triggered
@@ -159,9 +101,16 @@ export default function App() {
     };
     window.addEventListener("focus", handleFocus);
 
-    const unlisten = listen("postit-blur", async () => {
+    const unlisten = listen("main-blur", async () => {
       if (skipNextBlurHideRef.current) {
         skipNextBlurHideRef.current = false;
+        return;
+      }
+      // The publish flow holds the window open through its confirm and
+      // completion states even while the editor is empty.
+      if (
+        (window as unknown as { __riffHoldOpen?: boolean }).__riffHoldOpen
+      ) {
         return;
       }
       if (pendingBlurHideRef.current !== null) {
@@ -172,6 +121,11 @@ export default function App() {
 
         const nowMs = Date.now();
         if (nowMs < blurIgnoreUntilRef.current) return;
+        if (
+          (window as unknown as { __riffHoldOpen?: boolean }).__riffHoldOpen
+        ) {
+          return;
+        }
 
         const isFocused = await getCurrentWindow()
           .isFocused()
@@ -201,7 +155,7 @@ export default function App() {
 
   // Listen for shortcut triggers from Rust backend
   useEffect(() => {
-    if (windowInfo.type !== "postit") return;
+    if (windowInfo.type !== "main") return;
 
     const unlisten = listen<string>("shortcut-triggered", (event) => {
       skipNextBlurHideRef.current = true;
@@ -218,7 +172,7 @@ export default function App() {
 
   // Keep capture folder aligned with settings updates.
   useEffect(() => {
-    if (windowInfo.type !== "postit") return;
+    if (windowInfo.type !== "main") return;
 
     const unlisten = listen<StikSettings>("settings-changed", (event) => {
       void resolveFolder(undefined, event.payload)
@@ -231,9 +185,9 @@ export default function App() {
     };
   }, [windowInfo.type, resolveFolder]);
 
-  // Listen for settings shortcut (Cmd+Shift+,)
+  // Listen for settings shortcut (Cmd+Shift+,) and Cmd+K palette
   useEffect(() => {
-    if (windowInfo.type !== "postit") return;
+    if (windowInfo.type !== "main") return;
 
     const handleKeyDown = async (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === ",") {
@@ -242,17 +196,6 @@ export default function App() {
           await invoke("open_settings");
         } catch (error) {
           console.error("Failed to open settings:", error);
-        }
-      }
-
-      // Cmd/Ctrl+K opens the command menu. Stik has always had it on
-      // Cmd+Shift+P; K is what most people reach for first, so accept both.
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        try {
-          await invoke("open_command_palette");
-        } catch (error) {
-          console.error("Failed to open command palette:", error);
         }
       }
     };
@@ -301,66 +244,6 @@ export default function App() {
     contentRef.current = content;
   }, []);
 
-  // Render settings if this is that window type
-  if (windowInfo.type === "settings") {
-    return <SettingsModal isOpen={true} onClose={() => {}} isWindow={true} />;
-  }
-
-  // Render command palette if this is that window type
-  if (windowInfo.type === "command-palette") {
-    return <CommandPalette />;
-  }
-
-  // Render sticked note if this is a sticked window
-  if (windowInfo.type === "sticked") {
-    if (loadError) {
-      return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-bg rounded-[14px] gap-3 p-6">
-          <div className="text-coral text-sm font-medium">
-            {t("note.failedToLoad")}
-          </div>
-          <div className="text-stone text-xs text-center max-w-[280px]">
-            {loadError}
-          </div>
-          <button
-            onClick={async () => {
-              const { getCurrentWindow } = await import(
-                "@tauri-apps/api/window"
-              );
-              await getCurrentWindow().close();
-            }}
-            className="mt-2 px-4 py-2 text-xs bg-line hover:bg-line/70 text-ink rounded-lg transition-colors"
-          >
-            {t("common.close")}
-          </button>
-        </div>
-      );
-    }
-
-    if (!stickedNote) {
-      return (
-        <div className="w-full h-full flex items-center justify-center bg-bg rounded-[14px]">
-          <div className="text-stone text-sm">{t("common.loading")}</div>
-        </div>
-      );
-    }
-
-    return (
-      <PostIt
-        folder={currentFolder}
-        onSave={handleSave}
-        onClose={handleClose}
-        onFolderChange={handleFolderChange}
-        isSticked={true}
-        stickedId={stickedNote.id}
-        initialContent={stickedNote.content}
-        isViewing={windowInfo.viewing}
-        originalPath={stickedNote.originalPath}
-      />
-    );
-  }
-
-  // Render postit (capture mode)
   const handleOpenSettings = useCallback(async () => {
     try {
       await invoke("open_settings");
@@ -368,6 +251,14 @@ export default function App() {
       console.error("Failed to open settings:", error);
     }
   }, []);
+
+  if (windowInfo.type === "settings") {
+    return <SettingsModal isOpen={true} onClose={() => {}} isWindow={true} />;
+  }
+
+  if (windowInfo.type === "command-palette") {
+    return <CommandPalette />;
+  }
 
   return (
     <PostIt

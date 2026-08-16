@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for Stik",
-  "windows": ["postit", "settings", "command-palette", "sticked-*"],
+  "windows": ["main", "settings", "command-palette"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

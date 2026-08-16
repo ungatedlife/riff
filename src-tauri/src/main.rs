@@ -8,24 +8,12 @@ mod tray;
 mod windows;
 
 use commands::index::NoteIndex;
-use commands::{
-    cursor_positions, file_watcher, folders, index, notes, settings, share, sticked_notes,
-};
+use commands::{cursor_positions, file_watcher, folders, index, notes, settings, share};
 use shortcuts::shortcut_to_string;
 use state::AppState;
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
-use windows::{show_command_palette, show_postit_with_folder, show_settings};
-
-fn folder_for_opened_note(path: &std::path::Path, stik_root: &std::path::Path) -> String {
-    if let Ok(relative) = path.strip_prefix(stik_root) {
-        let mut components = relative.components();
-        if let (Some(first), Some(_second)) = (components.next(), components.next()) {
-            return first.as_os_str().to_string_lossy().to_string();
-        }
-    }
-    String::new()
-}
+use windows::{show_command_palette, show_main, show_settings};
 
 fn handle_opened_files(app: &AppHandle, paths: Vec<std::path::PathBuf>) {
     for path in paths {
@@ -38,42 +26,10 @@ fn handle_opened_files(app: &AppHandle, paths: Vec<std::path::PathBuf>) {
             continue;
         }
 
-        let app_handle = app.clone();
-        tauri::async_runtime::spawn(async move {
-            let path_str = path.to_string_lossy().to_string();
-            let path_for_read = path.clone();
-
-            let content = match tauri::async_runtime::spawn_blocking(move || {
-                std::fs::read_to_string(&path_for_read)
-            })
-            .await
-            {
-                Ok(Ok(content)) => content,
-                Ok(Err(err)) => {
-                    eprintln!("Failed to read opened markdown file {}: {}", path_str, err);
-                    return;
-                }
-                Err(err) => {
-                    eprintln!(
-                        "Failed to read opened markdown file {}: task join error: {}",
-                        path_str, err
-                    );
-                    return;
-                }
-            };
-
-            // Files inside the notes folder get their folder name resolved;
-            // external files get an empty folder (read-only viewing context).
-            let folder = folders::get_stik_folder()
-                .map(|root| folder_for_opened_note(&path, &root))
-                .unwrap_or_default();
-
-            if let Err(err) =
-                windows::open_note_for_viewing(app_handle, content, folder, path_str).await
-            {
-                eprintln!("Failed to open markdown file from Finder: {}", err);
-            }
-        });
+        let path_str = path.to_string_lossy().to_string();
+        if let Err(err) = windows::open_draft(app.clone(), path_str) {
+            eprintln!("Failed to open markdown file from Finder: {}", err);
+        }
     }
 }
 
@@ -114,10 +70,7 @@ fn main() {
                                     return;
                                 }
                                 "last_note" => {
-                                    let app = app.clone();
-                                    tauri::async_runtime::spawn(async move {
-                                        let _ = windows::reopen_last_note(app).await;
-                                    });
+                                    let _ = windows::reopen_last_note(app.clone());
                                     return;
                                 }
                                 _ => {}
@@ -141,7 +94,7 @@ fn main() {
                     let key = shortcut_to_string(shortcut);
 
                     if let Some(folder) = map.get(&key) {
-                        show_postit_with_folder(app, folder);
+                        show_main(app, folder);
                     }
                 })
                 .build(),
@@ -169,32 +122,20 @@ fn main() {
             settings::save_settings,
             share::build_clipboard_payload,
             share::copy_rich_text_to_clipboard,
-            sticked_notes::list_sticked_notes,
-            sticked_notes::create_sticked_note,
-            sticked_notes::update_sticked_note,
-            sticked_notes::close_sticked_note,
-            sticked_notes::get_sticked_note,
             windows::hide_window,
-            windows::hide_postit,
-            windows::create_sticked_window,
-            windows::close_sticked_window,
-            windows::pin_capture_note,
-            windows::open_note_for_viewing,
-            windows::get_viewing_note_content,
+            windows::hide_main,
+            windows::open_draft,
             windows::open_command_palette,
             windows::open_search,
             windows::open_manager,
             windows::open_settings,
-            windows::transfer_to_capture,
             windows::reopen_last_note,
             shortcuts::reload_shortcuts,
             shortcuts::pause_shortcuts,
             shortcuts::resume_shortcuts,
             settings::set_dock_icon_visibility,
             settings::set_tray_icon_visibility,
-            settings::save_viewing_window_size,
-            settings::save_viewing_window_geometry,
-            settings::save_capture_window_size,
+            settings::save_window_geometry,
             settings::import_theme_file,
             settings::export_theme_file,
             cursor_positions::get_cursor_position,
@@ -218,14 +159,13 @@ fn main() {
                 settings::apply_dock_icon_visibility(true);
             }
 
-            // Restore capture window size from settings
-            if let Some((w, h)) = settings.capture_window_size {
-                if let Some(win) = app.get_webview_window("postit") {
+            // Restore window size from settings
+            if let Some((w, h)) = settings.window_size {
+                if let Some(win) = app.get_webview_window("main") {
                     let _ = win.set_size(tauri::Size::Logical(tauri::LogicalSize::new(w, h)));
                 }
             }
 
-            windows::restore_sticked_notes(app.handle());
             tray::setup_tray(app)?;
 
             // Apply tray icon visibility from settings
@@ -235,18 +175,18 @@ fn main() {
                 }
             }
 
-            // Postit window: emit blur event so frontend can decide whether to hide
-            if let Some(window) = app.get_webview_window("postit") {
+            // Main window: emit blur event so frontend can decide whether to hide
+            if let Some(window) = app.get_webview_window("main") {
                 let w = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::Focused(focused) = event {
                         if !focused {
-                            let _ = w.emit("postit-blur", ());
+                            let _ = w.emit("main-blur", ());
                         }
                     }
                 });
             } else {
-                eprintln!("Warning: postit window not found during setup");
+                eprintln!("Warning: main window not found during setup");
             }
 
             Ok(())
@@ -266,38 +206,4 @@ fn main() {
                 handle_opened_files(app, paths);
             }
         });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::folder_for_opened_note;
-    use std::path::Path;
-
-    #[test]
-    fn file_in_stik_subfolder_returns_folder_name() {
-        let root = Path::new("/Users/test/Documents/Stik");
-        let path = Path::new("/Users/test/Documents/Stik/Work/20260301-note-abc1.md");
-        assert_eq!(folder_for_opened_note(path, root), "Work");
-    }
-
-    #[test]
-    fn file_directly_in_root_returns_empty() {
-        let root = Path::new("/Users/test/Documents/Stik");
-        let path = Path::new("/Users/test/Documents/Stik/note.md");
-        assert_eq!(folder_for_opened_note(path, root), "");
-    }
-
-    #[test]
-    fn nested_subfolder_returns_top_level_folder() {
-        let root = Path::new("/Users/test/Documents/Stik");
-        let path = Path::new("/Users/test/Documents/Stik/Projects/sub/deep/note.md");
-        assert_eq!(folder_for_opened_note(path, root), "Projects");
-    }
-
-    #[test]
-    fn file_outside_root_returns_empty() {
-        let root = Path::new("/Users/test/Documents/Stik");
-        let path = Path::new("/tmp/random/note.md");
-        assert_eq!(folder_for_opened_note(path, root), "");
-    }
 }

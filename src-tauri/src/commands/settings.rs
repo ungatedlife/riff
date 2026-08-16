@@ -76,9 +76,9 @@ pub struct StikSettings {
     #[serde(default = "default_font_size")]
     pub font_size: u32,
     #[serde(default)]
-    pub viewing_window_size: Option<(f64, f64)>,
+    pub window_size: Option<(f64, f64)>,
     #[serde(default)]
-    pub viewing_window_position: Option<(f64, f64)>,
+    pub window_position: Option<(f64, f64)>,
     #[serde(default)]
     pub custom_templates: Vec<CustomTemplate>,
     #[serde(default)]
@@ -87,8 +87,6 @@ pub struct StikSettings {
     pub text_direction: String,
     #[serde(default)]
     pub hide_tray_icon: bool,
-    #[serde(default)]
-    pub capture_window_size: Option<(f64, f64)>,
     #[serde(default)]
     pub active_theme: String,
     #[serde(default)]
@@ -141,13 +139,12 @@ impl Default for StikSettings {
             folder_colors: HashMap::new(),
             system_shortcuts: default_system_shortcuts(),
             font_size: 14,
-            viewing_window_size: None,
-            viewing_window_position: None,
+            window_size: None,
+            window_position: None,
             custom_templates: vec![],
             sidebar_position: String::new(),
             text_direction: "auto".to_string(),
             hide_tray_icon: false,
-            capture_window_size: None,
             active_theme: String::new(),
             custom_themes: vec![],
             font_family: None,
@@ -282,24 +279,10 @@ pub fn apply_dock_icon_visibility(hide: bool) {
 }
 
 #[tauri::command]
-pub fn save_viewing_window_size(width: f64, height: f64) -> Result<(), String> {
+pub fn save_window_geometry(width: f64, height: f64, x: f64, y: f64) -> Result<(), String> {
     let mut settings = load_settings_from_file()?;
-    settings.viewing_window_size = Some((width, height));
-    save_settings_to_file(&settings)
-}
-
-#[tauri::command]
-pub fn save_viewing_window_geometry(width: f64, height: f64, x: f64, y: f64) -> Result<(), String> {
-    let mut settings = load_settings_from_file()?;
-    settings.viewing_window_size = Some((width, height));
-    settings.viewing_window_position = Some((x, y));
-    save_settings_to_file(&settings)
-}
-
-#[tauri::command]
-pub fn save_capture_window_size(width: f64, height: f64) -> Result<(), String> {
-    let mut settings = load_settings_from_file()?;
-    settings.capture_window_size = Some((width, height));
+    settings.window_size = Some((width, height));
+    settings.window_position = Some((x, y));
     save_settings_to_file(&settings)
 }
 
