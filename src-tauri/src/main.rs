@@ -12,7 +12,7 @@ use commands::{cursor_positions, file_watcher, index, notes, publish, settings, 
 use shortcuts::shortcut_to_string;
 use state::AppState;
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
-use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
+use tauri_plugin_global_shortcut::ShortcutState;
 use windows::{show_command_palette, show_main, show_settings};
 
 fn handle_opened_files(app: &AppHandle, paths: Vec<std::path::PathBuf>) {
@@ -79,9 +79,12 @@ fn main() {
                     }
 
                     #[cfg(debug_assertions)]
-                    if shortcut.matches(Modifiers::SUPER | Modifiers::ALT, Code::KeyI) {
-                        for (_, window) in app.webview_windows() {
-                            window.open_devtools();
+                    {
+                        use tauri_plugin_global_shortcut::{Code, Modifiers};
+                        if shortcut.matches(Modifiers::SUPER | Modifiers::ALT, Code::KeyI) {
+                            for (_, window) in app.webview_windows() {
+                                window.open_devtools();
+                            }
                         }
                     }
                 })
