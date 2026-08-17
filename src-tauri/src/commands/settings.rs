@@ -37,7 +37,11 @@ fn default_window_opacity() -> f64 {
 }
 
 fn default_font_size() -> u32 {
-    16
+    20
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_text_direction() -> String {
@@ -58,7 +62,8 @@ pub struct RiffSettings {
     /// None = `<vault_dir>/Quickies.md`.
     #[serde(default)]
     pub quickies_file: Option<String>,
-    #[serde(default)]
+    /// Riff is a menu bar app first: no Dock icon unless the user opts in.
+    #[serde(default = "default_true")]
     pub hide_dock_icon: bool,
     #[serde(default)]
     pub system_shortcuts: HashMap<String, String>,
@@ -91,9 +96,9 @@ impl Default for RiffSettings {
             drafts_dir: None,
             vault_dir: None,
             quickies_file: None,
-            hide_dock_icon: false,
+            hide_dock_icon: true,
             system_shortcuts: default_system_shortcuts(),
-            font_size: 16,
+            font_size: 20,
             window_size: None,
             window_position: None,
             text_direction: "auto".to_string(),

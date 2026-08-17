@@ -29,6 +29,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 import { riffEditorTheme, riffHighlightStyle } from "@/extensions/cm-theme";
+import { forgedCaret } from "@/extensions/cm-forged-caret";
 import {
   toggleInlineFormat,
   insertLink,
@@ -68,6 +69,8 @@ interface EditorProps {
   showFormatToolbar?: boolean;
   textDirection?: "auto" | "ltr" | "rtl";
   onPublish?: () => void;
+  /** Replace the native caret with the gliding forged caret (fullscreen room). */
+  forgedCaret?: boolean;
   onImagePaste?: (file: File) => Promise<string | null>;
   onImageDropPath?: (path: string) => Promise<string | null>;
   onWikiLinkClick?: (slug: string, path: string) => void;
@@ -102,6 +105,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(
       showFormatToolbar,
       textDirection = "auto",
       onPublish,
+      forgedCaret: useForgedCaret,
       onImagePaste,
       onImageDropPath,
       onWikiLinkClick,
@@ -511,6 +515,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         EditorView.lineWrapping,
         // CSS class for the content element
         EditorView.contentAttributes.of({ class: "riff-editor" }),
+        ...(useForgedCaret ? [forgedCaret()] : []),
       ];
 
       const state = EditorState.create({

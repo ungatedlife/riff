@@ -148,12 +148,13 @@ export default function App() {
     void runAutoUpdate();
   }, [windowInfo.type]);
 
-  // Listen for settings shortcut (Cmd+Shift+,)
+  // Cmd+, opens settings from either capture surface (riff or quickie).
+  // e.code covers layouts where Shift+comma reports a different e.key.
   useEffect(() => {
-    if (windowInfo.type !== "main") return;
+    if (windowInfo.type !== "main" && windowInfo.type !== "quickie") return;
 
     const handleKeyDown = async (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === ",") {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "," || e.code === "Comma")) {
         e.preventDefault();
         try {
           await invoke("open_settings");

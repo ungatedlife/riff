@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
-const CURRENT_VERSION: u32 = 1;
+const CURRENT_VERSION: u32 = 2;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct VersionedStore {
@@ -61,6 +61,7 @@ fn migrate(from_version: u32, data: Value) -> Result<Value, String> {
     while version < CURRENT_VERSION {
         current = match version {
             0 => migrate_v0_to_v1(current)?,
+            1 => migrate_v1_to_v2(current)?,
             _ => return Err(format!("Unknown migration version: {}", version)),
         };
         version += 1;
@@ -72,4 +73,50 @@ fn migrate(from_version: u32, data: Value) -> Result<Value, String> {
 /// v0 → v1: No structural changes, just wrapping in versioned envelope.
 fn migrate_v0_to_v1(data: Value) -> Result<Value, String> {
     Ok(data)
+}
+
+/// v1 → v2: The defaults changed — menu-bar-only app and 20px editor text
+/// (matching the vault's typography). Values still sitting at the old defaults
+/// follow along; anything the user changed away from the old defaults is left
+/// untouched. Stores without these keys (cursor positions, etc.) pass through
+/// unchanged.
+fn migrate_v1_to_v2(mut data: Value) -> Result<Value, String> {
+    if let Some(obj) = data.as_object_mut() {
+        if obj.get("font_size").and_then(Value::as_u64) == Some(16) {
+            obj.insert("font_size".to_string(), Value::from(20));
+        }
+        if obj.get("hide_dock_icon").and_then(Value::as_bool) == Some(false) {
+            obj.insert("hide_dock_icon".to_string(), Value::from(true));
+        }
+    }
+    Ok(data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn v1_to_v2_moves_old_defaults_to_new_defaults() {
+        let data = json!({ "font_size": 16, "hide_dock_icon": false });
+        let migrated = migrate(1, data).unwrap();
+        assert_eq!(migrated["font_size"], 20);
+        assert_eq!(migrated["hide_dock_icon"], true);
+    }
+
+    #[test]
+    fn v1_to_v2_leaves_user_chosen_values_alone() {
+        let data = json!({ "font_size": 22, "hide_dock_icon": true });
+        let migrated = migrate(1, data).unwrap();
+        assert_eq!(migrated["font_size"], 22);
+        assert_eq!(migrated["hide_dock_icon"], true);
+    }
+
+    #[test]
+    fn v1_to_v2_ignores_stores_without_settings_keys() {
+        let data = json!({ "some/path.md": { "head": 4, "anchor": 4 } });
+        let migrated = migrate(1, data.clone()).unwrap();
+        assert_eq!(migrated, data);
+    }
 }

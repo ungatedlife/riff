@@ -3,10 +3,12 @@ export interface FontEntry {
   label: string;    // Display label
   category: "sans" | "serif" | "mono";
   weights: number[];
+  bundled?: boolean; // ships with the app via @font-face — never fetched from Google
 }
 
 export const FONTS: FontEntry[] = [
   // Sans-serif
+  { id: "iA Writer Duo S", label: "iA Writer Duo S", category: "sans", weights: [400, 700], bundled: true },
   { id: "Inter", label: "Inter", category: "sans", weights: [400, 500] },
   { id: "Lato", label: "Lato", category: "sans", weights: [400, 700] },
   { id: "Plus Jakarta Sans", label: "Plus Jakarta Sans", category: "sans", weights: [400, 500] },
@@ -27,7 +29,7 @@ export function loadGoogleFont(fontId: string): void {
   if (loadedFonts.has(fontId)) return;
   loadedFonts.add(fontId);
   const font = FONTS.find((f) => f.id === fontId);
-  if (!font) return;
+  if (!font || font.bundled) return;
   const urlFamily = fontId.replace(/ /g, "+");
   const weights = font.weights.join(";");
   const link = document.createElement("link");

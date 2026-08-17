@@ -1,51 +1,10 @@
-use crate::commands::settings;
 use crate::state::{AppState, LastSavedNote};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 const SETTINGS_WINDOW_WIDTH: f64 = 860.0;
 const SETTINGS_WINDOW_HEIGHT: f64 = 720.0;
 const SETTINGS_WINDOW_MIN_WIDTH: f64 = 760.0;
 const SETTINGS_WINDOW_MIN_HEIGHT: f64 = 560.0;
-
-const MAIN_DEFAULT_WIDTH: f64 = 680.0;
-const MAIN_DEFAULT_HEIGHT: f64 = 540.0;
-
-/// Minimum overlap (in physical pixels) between window and monitor for the position to be usable.
-const MIN_OVERLAP: f64 = 80.0;
-
-/// Check if a window at (x, y) with the given size overlaps sufficiently with any connected
-/// monitor. All coordinates are in **physical pixels** (same space as `outerPosition()`).
-/// Uses rectangle intersection — handles negative coordinates from left/top monitors.
-fn is_window_visible_on_any_monitor(app: &AppHandle, x: f64, y: f64, w: f64, h: f64) -> bool {
-    let monitors = app
-        .get_webview_window("main")
-        .and_then(|win| win.available_monitors().ok());
-
-    let Some(monitors) = monitors else {
-        return false;
-    };
-
-    for monitor in monitors {
-        let pos = monitor.position();
-        let size = monitor.size();
-
-        // All values in physical pixels — no scale conversion needed.
-        let mx = pos.x as f64;
-        let my = pos.y as f64;
-        let mw = size.width as f64;
-        let mh = size.height as f64;
-
-        // Rectangle intersection: overlap width/height between window and monitor
-        let overlap_w = (x + w).min(mx + mw) - x.max(mx);
-        let overlap_h = (y + h).min(my + mh) - y.max(my);
-
-        if overlap_w >= MIN_OVERLAP && overlap_h >= MIN_OVERLAP {
-            return true;
-        }
-    }
-
-    false
-}
 
 fn remember_last_note(state: &AppState, path: &str) {
     if path.trim().is_empty() {
@@ -61,29 +20,34 @@ fn remember_last_note(state: &AppState, path: &str) {
     });
 }
 
-pub fn show_main(app: &AppHandle) {
+/// Present the writing room: fullscreen on the monitor the cursor is on —
+/// summoning should meet the writer where they are, not where the window
+/// last lived. Simple fullscreen (no new macOS space) keeps both the summon
+/// and the return instant.
+fn present_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        if let Ok(s) = settings::load_settings_from_file() {
-            // Restore persisted window size
-            let (w, h) = s
-                .window_size
-                .unwrap_or((MAIN_DEFAULT_WIDTH, MAIN_DEFAULT_HEIGHT));
-            if s.window_size.is_some() {
-                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(w, h)));
-            }
-            // Restore position only if it's visible on a connected monitor.
-            if let Some((x, y)) = s.window_position {
-                if is_window_visible_on_any_monitor(app, x, y, w, h) {
-                    let _ = window.set_position(tauri::Position::Physical(PhysicalPosition::new(
-                        x as i32, y as i32,
-                    )));
-                } else {
-                    let _ = window.center();
-                }
+        if let Ok(cursor) = app.cursor_position() {
+            if let Ok(Some(monitor)) = app.monitor_from_point(cursor.x, cursor.y) {
+                let _ = window.set_position(tauri::Position::Physical(*monitor.position()));
             }
         }
+        let _ = window.set_simple_fullscreen(true);
         let _ = window.show();
         let _ = window.set_focus();
+    }
+}
+
+/// Drop out of simple fullscreen after the room hides, so the frame restore
+/// happens invisibly and the next summon starts from a clean state.
+pub fn release_main_fullscreen(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_simple_fullscreen(false);
+    }
+}
+
+pub fn show_main(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        present_main(app);
         let _ = window.emit("shortcut-triggered", ());
     }
 }
@@ -198,8 +162,11 @@ pub fn show_quickie(app: &AppHandle) {
 }
 
 #[tauri::command]
-pub fn hide_window(window: tauri::Window) {
+pub fn hide_window(window: tauri::Window, app: AppHandle) {
     let _ = window.hide();
+    if window.label() == "main" {
+        release_main_fullscreen(&app);
+    }
 }
 
 #[tauri::command]
@@ -207,6 +174,7 @@ pub fn hide_main(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
     }
+    release_main_fullscreen(&app);
 }
 
 /// Load a draft into the writing room: shows + focuses the main window and
@@ -222,8 +190,7 @@ pub fn open_draft(app: AppHandle, path: String) -> Result<(), String> {
     }
 
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
+        present_main(&app);
         let _ = window.emit(
             "open-draft",
             serde_json::json!({ "path": path, "content": content }),

@@ -18,7 +18,13 @@ const config: Config = {
         line: "rgb(var(--color-line) / <alpha-value>)",
       },
       fontFamily: {
-        sans: ["system-ui", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        sans: [
+          "iA Writer Duo S",
+          "system-ui",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "sans-serif",
+        ],
         mono: ["Monaco", "Consolas", "monospace"],
       },
       borderRadius: {

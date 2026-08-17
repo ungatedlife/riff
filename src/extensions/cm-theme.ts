@@ -308,9 +308,12 @@ export const riffEditorTheme = EditorView.theme({
 export const riffHighlightStyle = syntaxHighlighting(
   HighlightStyle.define([
     // Headings — bold, slightly larger
-    { tag: tags.heading1, fontWeight: "700", fontSize: "1.43em" },
-    { tag: tags.heading2, fontWeight: "600", fontSize: "1.21em" },
-    { tag: tags.heading3, fontWeight: "600", fontSize: "1.07em" },
+    // Heading scale mirrors the vault's Obsidian setup (Minimal + Style
+    // Settings): h1 1.6/600, h2 1.45/500, h3 1.25, h4 1.15.
+    { tag: tags.heading1, fontWeight: "600", fontSize: "1.6em" },
+    { tag: tags.heading2, fontWeight: "500", fontSize: "1.45em" },
+    { tag: tags.heading3, fontWeight: "600", fontSize: "1.25em" },
+    { tag: tags.heading4, fontWeight: "600", fontSize: "1.15em" },
     // Markdown syntax markers (#, **, *, ~~, `, [, ], -, 1.)
     // No fontWeight override — let markers inherit weight from their context
     // (e.g. # inside a heading stays bold, ** stays normal)

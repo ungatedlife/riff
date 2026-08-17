@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import ShortcutRecorder from "./ShortcutRecorder";
-import type {
-  CustomFontEntry,
-  CustomThemeDefinition,
-  RiffSettings,
-  ThemeColors,
+import {
+  DEFAULT_FONT_SIZE,
+  type CustomFontEntry,
+  type CustomThemeDefinition,
+  type RiffSettings,
+  type ThemeColors,
 } from "@/types";
 import ConfirmDialog from "./ConfirmDialog";
 import {
@@ -989,26 +990,32 @@ export default function SettingsContent({
                 onClick={() =>
                   onSettingsChange({
                     ...settings,
-                    font_size: Math.max((settings.font_size ?? 16) - 1, 12),
+                    font_size: Math.max(
+                      (settings.font_size ?? DEFAULT_FONT_SIZE) - 1,
+                      12,
+                    ),
                   })
                 }
-                disabled={(settings.font_size ?? 16) <= 12}
+                disabled={(settings.font_size ?? DEFAULT_FONT_SIZE) <= 12}
                 className="w-7 h-7 flex items-center justify-center rounded-lg border border-line text-[14px] text-ink hover:bg-line/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 -
               </button>
               <span className="w-8 text-center text-[13px] font-mono text-ink tabular-nums">
-                {settings.font_size ?? 16}
+                {settings.font_size ?? DEFAULT_FONT_SIZE}
               </span>
               <button
                 type="button"
                 onClick={() =>
                   onSettingsChange({
                     ...settings,
-                    font_size: Math.min((settings.font_size ?? 16) + 1, 48),
+                    font_size: Math.min(
+                      (settings.font_size ?? DEFAULT_FONT_SIZE) + 1,
+                      48,
+                    ),
                   })
                 }
-                disabled={(settings.font_size ?? 16) >= 48}
+                disabled={(settings.font_size ?? DEFAULT_FONT_SIZE) >= 48}
                 className="w-7 h-7 flex items-center justify-center rounded-lg border border-line text-[14px] text-ink hover:bg-line/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 +

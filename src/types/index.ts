@@ -22,6 +22,12 @@ export interface CustomThemeDefinition {
   colors: ThemeColors;
 }
 
+/**
+ * Default editor text size in px. Mirrors `default_font_size` in settings.rs
+ * and the vault's Obsidian base font size, so the riff room reads like home.
+ */
+export const DEFAULT_FONT_SIZE = 20;
+
 export interface RiffSettings {
   theme_mode: string;
   /** Absolute path of the drafts directory. Empty/undefined = ~/Documents/Riff. */
@@ -37,7 +43,7 @@ export interface RiffSettings {
   hide_tray_icon: boolean;
   active_theme: string;
   custom_themes: CustomThemeDefinition[];
-  font_family?: string | null; // null = system default
+  font_family?: string | null; // null = app default (bundled iA Writer Duo S)
   window_opacity?: number; // 0.2–1.0, default 1.0
   custom_fonts?: CustomFontEntry[];
 }

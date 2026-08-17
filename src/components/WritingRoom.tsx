@@ -5,7 +5,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import Editor, { type EditorRef } from "./Editor";
-import type { RiffSettings } from "@/types";
+import ConfettiBurst from "./ConfettiBurst";
+import { DEFAULT_FONT_SIZE, type RiffSettings } from "@/types";
 import {
   isMarkdownEffectivelyEmpty,
   normalizeMarkdownForCopy,
@@ -86,7 +87,7 @@ export default function WritingRoom({
   >("idle");
   const [pendingTitle, setPendingTitle] = useState("");
   const [vaultDir, setVaultDir] = useState<string | null>(null);
-  const [fontSize, setFontSize] = useState(16);
+  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [fontFamily, setFontFamily] = useState<string | null>(null);
   const [windowOpacity, setWindowOpacity] = useState(1.0);
   const [customFonts, setCustomFonts] = useState<
@@ -98,7 +99,8 @@ export default function WritingRoom({
   const [textDirection, setTextDirection] = useState<"auto" | "ltr" | "rtl">(
     "auto",
   );
-  const [zenMode, setZenMode] = useState(false);
+  // The fullscreen room opens distraction-free; Cmd+. invites the chrome back.
+  const [zenMode, setZenMode] = useState(true);
   const [formatToolbar, setFormatToolbar] = useState(() => {
     try {
       return localStorage.getItem("riff:format-toolbar") !== "0";
@@ -224,7 +226,7 @@ export default function WritingRoom({
   useEffect(() => {
     invoke<RiffSettings>("get_settings")
       .then((s) => {
-        setFontSize(s.font_size ?? 16);
+        setFontSize(s.font_size ?? DEFAULT_FONT_SIZE);
         setFontFamily(s.font_family ?? null);
         setWindowOpacity(s.window_opacity ?? 1.0);
         setCustomFonts(s.custom_fonts ?? []);
@@ -240,7 +242,7 @@ export default function WritingRoom({
       });
 
     const unlisten = listen<RiffSettings>("settings-changed", (event) => {
-      setFontSize(event.payload.font_size ?? 16);
+      setFontSize(event.payload.font_size ?? DEFAULT_FONT_SIZE);
       setFontFamily(event.payload.font_family ?? null);
       setWindowOpacity(event.payload.window_opacity ?? 1.0);
       setCustomFonts(event.payload.custom_fonts ?? []);
@@ -518,7 +520,7 @@ export default function WritingRoom({
       } else if (e.key === "-") {
         newSize = Math.max(fontSize - 1, 12);
       } else if (e.key === "0") {
-        newSize = 16;
+        newSize = DEFAULT_FONT_SIZE;
       }
 
       if (newSize !== null && newSize !== fontSize) {
@@ -702,29 +704,32 @@ export default function WritingRoom({
       const info = await invoke<{ title: string }>("publish_riff", { path });
       setPendingTitle(info.title);
       setPublishState("done");
-
-      setTimeout(async () => {
-        setContent("");
-        contentRef.current = "";
-        onContentChange?.("");
-        editorRef.current?.clear();
-        setCurrentDraftPath(null);
-        setPublishState("idle");
-        await onClose();
-      }, 1100);
+      // The confetti burst now owns the exit: finishPublish runs on its onDone.
     } catch (error) {
       console.error("Failed to publish riff:", error);
       setPublishState("idle");
       showToast(String(error));
     }
-  }, [
-    currentDraftPath,
-    getLiveContent,
-    onSave,
-    onClose,
-    onContentChange,
-    showToast,
-  ]);
+  }, [currentDraftPath, getLiveContent, onSave, showToast]);
+
+  // After the confetti fades: reset the room and hide the window, dropping
+  // the writer right back where they were before the riff sesh.
+  const finishedRef = useRef(false);
+  useEffect(() => {
+    finishedRef.current = false;
+  }, [publishState]);
+
+  const finishPublish = useCallback(async () => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    setContent("");
+    contentRef.current = "";
+    onContentChange?.("");
+    editorRef.current?.clear();
+    setCurrentDraftPath(null);
+    setPublishState("idle");
+    await onClose();
+  }, [onClose, onContentChange]);
 
   // Keys for the confirm overlay: Enter/⌘↩ publishes, Escape keeps riffing.
   useEffect(() => {
@@ -909,7 +914,7 @@ export default function WritingRoom({
   return (
     <>
       <div
-        className={`relative w-full h-full rounded-[14px] overflow-hidden flex flex-col ${
+        className={`riff-fullscreen relative w-full h-full overflow-hidden flex flex-col ${
           zenMode ? "zen-mode" : ""
         }`}
         style={{ backgroundColor: `rgb(var(--color-bg) / ${windowOpacity})` }}
@@ -1004,6 +1009,7 @@ export default function WritingRoom({
               placeholder={t("postit.typePlaceholder")}
               showFormatToolbar={zenMode ? false : formatToolbar}
               textDirection={textDirection}
+              forgedCaret
               onPublish={requestPublish}
               onImagePaste={handleImagePaste}
               onImageDropPath={handleImageDropPath}
@@ -1111,9 +1117,10 @@ export default function WritingRoom({
             </div>
         )}
 
-        {/* Publish overlay: confirm → publishing → done */}
+        {/* Publish overlay: confirm → publishing → done (confetti!) */}
+        {publishState === "done" && <ConfettiBurst onDone={() => void finishPublish()} />}
         {publishState !== "idle" && (
-          <div className="absolute inset-0 z-[220] flex items-center justify-center rounded-[14px] bg-bg/90 backdrop-blur-sm">
+          <div className="absolute inset-0 z-[220] flex items-center justify-center bg-bg/90 backdrop-blur-sm">
             {publishState === "done" ? (
               <div className="flex flex-col items-center gap-3 px-6 text-center">
                 <svg

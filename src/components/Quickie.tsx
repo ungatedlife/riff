@@ -8,7 +8,8 @@ import { isMarkdownEffectivelyEmpty } from "@/utils/normalizeMarkdownForCopy";
 import { useTranslation } from "@/hooks/useTranslation";
 
 /// The quickie post-it: a fleeting thought, appended to the running note
-/// in the vault. Esc or ⌘↩ captures; blur with nothing typed just hides.
+/// in the vault. ⌘↩ captures; Esc tucks the window away with the draft
+/// intact for the next summon; blur with nothing typed just hides.
 export default function Quickie() {
   const { t } = useTranslation();
   const [isSaving, setIsSaving] = useState(false);
@@ -58,19 +59,20 @@ export default function Quickie() {
     }
   }, [hideAndReset]);
 
-  // Escape captures (or just hides when there's nothing to capture)
+  // Escape dismisses without capturing — the draft stays for the next summon
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (e.defaultPrevented) return;
+      if (isSavingRef.current) return;
       const view = editorRef.current?.getView();
       const status = view ? completionStatus(view.state) : null;
       if (status === "active" || status === "pending") return; // CM closes it
-      void capture();
+      void invoke("hide_window").catch(() => {});
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [capture]);
+  }, []);
 
   // Focus the editor on summon
   useEffect(() => {
@@ -169,14 +171,14 @@ export default function Quickie() {
           className="px-2 py-1 rounded-md text-[10px] font-semibold bg-coral-light text-coral hover:bg-coral hover:text-white transition-colors"
           title={t("quickie.captureHint")}
         >
-          {t("common.esc")}
+          {t("common.cmdEnter")}
         </button>
       </div>
 
       {/* Editor — plain and quick: no toolbar, fixed compact type */}
       <div
         className="flex-1 relative overflow-hidden min-h-0"
-        style={{ "--editor-font-size": "14px" } as React.CSSProperties}
+        style={{ "--editor-font-size": "16px" } as React.CSSProperties}
       >
         <Editor
           ref={editorRef}
