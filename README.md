@@ -71,6 +71,20 @@ On first launch macOS asks for access to your Documents folder (drafts live
 there). The app icon is a placeholder — drop a 1024×1024 PNG on
 `npx tauri icon` to regenerate the set.
 
+## Releasing
+
+```bash
+npm run release          # patch bump; also release:minor / release:major
+```
+
+That bumps the version, commits, tags, and pushes. CI builds a universal
+binary, signs the update with Riff's minisign key, and publishes a GitHub
+release with `latest.json`. Every installed copy checks that feed on
+launch, downloads silently, and applies the new version next time it
+starts. The private key lives at `~/.tauri/riff-updater.key` (also the
+`TAURI_SIGNING_PRIVATE_KEY` repo secret) — losing it means shipped apps
+can't verify future updates, so back it up.
+
 ## Credit
 
 Riff is a fork of [Stik](https://github.com/0xMassi/stik_app) by Massi

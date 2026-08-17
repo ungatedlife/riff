@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { check } from "@tauri-apps/plugin-updater";
 import WritingRoom from "./components/WritingRoom";
 import Quickie from "./components/Quickie";
 import SettingsModal from "./components/SettingsModal";
@@ -123,6 +124,28 @@ export default function App() {
     return () => {
       unlisten.then((fn) => fn());
     };
+  }, [windowInfo.type]);
+
+  // Silent auto-update on startup (main window, production builds only).
+  // The new version applies on the next launch of the app.
+  useEffect(() => {
+    if (windowInfo.type !== "main") return;
+    if (window.location.port) return; // dev server
+
+    const runAutoUpdate = async () => {
+      try {
+        const update = await check({ timeout: 15_000 });
+        if (!update) return;
+        await update.downloadAndInstall();
+        console.log(
+          `Riff ${update.version} downloaded; it applies on next launch`,
+        );
+      } catch (error) {
+        console.error("Auto-update failed:", error);
+      }
+    };
+
+    void runAutoUpdate();
   }, [windowInfo.type]);
 
   // Listen for settings shortcut (Cmd+Shift+,)
