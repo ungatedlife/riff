@@ -7,4 +7,5 @@ pub mod quickies;
 pub mod settings;
 pub mod share;
 pub mod storage;
+pub mod vault;
 pub mod versioning;

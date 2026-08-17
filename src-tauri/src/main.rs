@@ -10,6 +10,7 @@ mod windows;
 use commands::index::NoteIndex;
 use commands::{
     cursor_positions, file_watcher, index, notes, publish, quickies, settings, share, storage,
+    vault,
 };
 use shortcuts::shortcut_to_string;
 use state::AppState;
@@ -111,6 +112,7 @@ fn main() {
             storage::get_drafts_directory,
             publish::publish_riff,
             quickies::append_quickie,
+            vault::search_vault_links,
             index::rebuild_index,
             settings::get_settings,
             settings::save_settings,

@@ -26,7 +26,7 @@ export interface CustomThemeDefinition {
  * Default editor text size in px. Mirrors `default_font_size` in settings.rs
  * and the vault's Obsidian base font size, so the riff room reads like home.
  */
-export const DEFAULT_FONT_SIZE = 20;
+export const DEFAULT_FONT_SIZE = 21;
 
 export interface RiffSettings {
   theme_mode: string;

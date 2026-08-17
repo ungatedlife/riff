@@ -20,6 +20,36 @@ fn remember_last_note(state: &AppState, path: &str) {
     });
 }
 
+/// Hard-hide (or restore) the macOS menu bar and Dock while the room is
+/// fullscreen. Simple fullscreen's default auto-hide lets the menu bar drop
+/// down on a mouse-to-top and — notably when the system already auto-hides
+/// it — stick there. The room wants no menu bar at all, so while it's up we
+/// take the stronger Hide options; on release the defaults come back.
+fn set_immersive_presentation(app: &AppHandle, immersive: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.run_on_main_thread(move || {
+            use objc2::MainThreadMarker;
+            use objc2_app_kit::{NSApplication, NSApplicationPresentationOptions};
+
+            if let Some(mtm) = MainThreadMarker::new() {
+                let ns_app = NSApplication::sharedApplication(mtm);
+                let options = if immersive {
+                    NSApplicationPresentationOptions::HideDock
+                        | NSApplicationPresentationOptions::HideMenuBar
+                } else {
+                    NSApplicationPresentationOptions::Default
+                };
+                ns_app.setPresentationOptions(options);
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, immersive);
+    }
+}
+
 /// Present the writing room: fullscreen on the monitor the cursor is on —
 /// summoning should meet the writer where they are, not where the window
 /// last lived. Simple fullscreen (no new macOS space) keeps both the summon
@@ -32,6 +62,7 @@ fn present_main(app: &AppHandle) {
             }
         }
         let _ = window.set_simple_fullscreen(true);
+        set_immersive_presentation(app, true);
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -43,6 +74,7 @@ pub fn release_main_fullscreen(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_simple_fullscreen(false);
     }
+    set_immersive_presentation(app, false);
 }
 
 pub fn show_main(app: &AppHandle) {

@@ -84,6 +84,30 @@ fn derive_title(content: &str) -> (String, String) {
     }
 }
 
+/// The published file carries the riff's *title* as its name — in Obsidian
+/// the filename IS the note's name, so `# On riffs` becomes `On riffs.md`
+/// and `[[On riffs]]` resolves naturally. Only filesystem- and
+/// Obsidian-hostile characters are dropped.
+fn sanitize_filename(title: &str) -> String {
+    let cleaned: String = title
+        .chars()
+        .map(|c| match c {
+            // Filesystem-reserved (macOS/Windows) + Obsidian link breakers.
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | '[' | ']' | '#' | '^' => ' ',
+            _ => c,
+        })
+        .collect();
+
+    let collapsed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = collapsed.trim_matches(|c| c == '.' || c == ' ').to_string();
+
+    if trimmed.is_empty() {
+        "Untitled".to_string()
+    } else {
+        trimmed
+    }
+}
+
 fn slugify(title: &str) -> String {
     let mut slug = String::new();
     let mut prev_dash = true; // suppress a leading dash
@@ -109,14 +133,15 @@ fn slugify(title: &str) -> String {
     }
 }
 
-/// First free `<slug>.md`, `<slug>-2.md`, … `<slug>-99.md` in the vault.
-fn resolve_vault_path(vault: &Path, slug: &str) -> Result<PathBuf, String> {
-    let base = vault.join(format!("{}.md", slug));
+/// First free `<name>.md`, `<name> 2.md`, … `<name> 99.md` in the vault
+/// (space-number, the way Obsidian dedupes duplicate note names).
+fn resolve_vault_path(vault: &Path, name: &str) -> Result<PathBuf, String> {
+    let base = vault.join(format!("{}.md", name));
     if !base.exists() {
         return Ok(base);
     }
     for n in 2..100 {
-        let candidate = vault.join(format!("{}-{}.md", slug, n));
+        let candidate = vault.join(format!("{} {}.md", name, n));
         if !candidate.exists() {
             return Ok(candidate);
         }
@@ -194,7 +219,8 @@ pub fn publish_riff(
 
     let (title, body) = derive_title(&content);
     let slug = slugify(&title);
-    let target = resolve_vault_path(&vault, &slug)?;
+    let filename = sanitize_filename(&title);
+    let target = resolve_vault_path(&vault, &filename)?;
     let (rewritten, assets_copied) = rewrite_and_copy_assets(&body, &root, &vault)?;
 
     let word_count = rewritten.split_whitespace().count();
@@ -237,7 +263,10 @@ pub fn publish_riff(
 
 #[cfg(test)]
 mod tests {
-    use super::{derive_title, frontmatter, resolve_vault_path, rewrite_and_copy_assets, slugify};
+    use super::{
+        derive_title, frontmatter, resolve_vault_path, rewrite_and_copy_assets, sanitize_filename,
+        slugify,
+    };
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -295,11 +324,26 @@ mod tests {
     }
 
     #[test]
-    fn vault_path_resolution_skips_existing_files() {
+    fn filenames_keep_the_human_title() {
+        assert_eq!(sanitize_filename("On riffs"), "On riffs");
+        assert_eq!(
+            sanitize_filename("Ship it: thoughts & questions?"),
+            "Ship it thoughts & questions"
+        );
+        assert_eq!(
+            sanitize_filename("[[Nested]] #tags ^blocks"),
+            "Nested tags blocks"
+        );
+        assert_eq!(sanitize_filename("///"), "Untitled");
+        assert_eq!(sanitize_filename("..."), "Untitled");
+    }
+
+    #[test]
+    fn vault_path_resolution_skips_existing_files_obsidian_style() {
         let vault = temp_dir("collide");
-        fs::write(vault.join("on-riffs.md"), "x").unwrap();
-        let next = resolve_vault_path(&vault, "on-riffs").unwrap();
-        assert_eq!(next.file_name().unwrap(), "on-riffs-2.md");
+        fs::write(vault.join("On riffs.md"), "x").unwrap();
+        let next = resolve_vault_path(&vault, "On riffs").unwrap();
+        assert_eq!(next.file_name().unwrap(), "On riffs 2.md");
         let _ = fs::remove_dir_all(&vault);
     }
 

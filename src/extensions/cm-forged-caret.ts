@@ -5,6 +5,13 @@
  * jumping, blinking with a gentle fade only once it has settled.
  *
  * Honors prefers-reduced-motion: the glide collapses to an instant jump.
+ *
+ * Layout reads (coordsAtPos, getBoundingClientRect) are forbidden inside a
+ * plugin's update() — CodeMirror throws and evicts the plugin. All measuring
+ * therefore goes through view.requestMeasure, whose read phase runs after
+ * the update cycle. The native caret is hidden via a class this plugin owns
+ * (added on create, removed on destroy), so even if the plugin ever dies,
+ * writing degrades to the native caret instead of no caret at all.
  */
 
 import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
@@ -16,6 +23,19 @@ const GLIDE_MAX = 0.85;
 const GLIDE_RAMP_PX = 320;
 /** Close enough — snap to target and let the blink resume. */
 const SETTLE_PX = 0.4;
+
+/**
+ * Marks that the forged caret is live (hides the native one). Lives on
+ * scrollDOM: CodeMirror re-syncs the class lists of view.dom and contentDOM
+ * from its facets, wiping foreign classes — the scroller it leaves alone.
+ */
+export const FORGED_CARET_LIVE_CLASS = "forged-caret-live";
+
+interface CaretMeasure {
+  x: number;
+  y: number;
+  h: number;
+}
 
 class ForgedCaret {
   private caret: HTMLDivElement;
@@ -31,14 +51,22 @@ class ForgedCaret {
   private gliding = false;
   private reduceMotion: MediaQueryList;
 
+  /** Reused measure request; keyed on the plugin so CM dedupes rapid updates. */
+  private measureReq = {
+    key: this as object,
+    read: (): CaretMeasure | null => this.readCaret(),
+    write: (m: CaretMeasure | null) => this.applyMeasure(m),
+  };
+
   constructor(private view: EditorView) {
     this.caret = document.createElement("div");
     this.caret.className = "forged-caret forged-caret-hidden";
     this.caret.setAttribute("aria-hidden", "true");
     view.scrollDOM.appendChild(this.caret);
+    view.scrollDOM.classList.add(FORGED_CARET_LIVE_CLASS);
     this.reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     // Initial position once the view has measured itself.
-    view.requestMeasure({ read: () => this.measure() });
+    view.requestMeasure(this.measureReq);
   }
 
   update(update: ViewUpdate) {
@@ -48,38 +76,50 @@ class ForgedCaret {
       update.geometryChanged ||
       update.focusChanged
     ) {
-      this.measure();
+      // No layout reads here — schedule them for the measure phase.
+      this.view.requestMeasure(this.measureReq);
     }
   }
 
-  private measure() {
+  /** Measure-phase read: where should the caret be? null = hide it. */
+  private readCaret(): CaretMeasure | null {
     const { view } = this;
     const sel = view.state.selection.main;
 
     // The forged caret only stands in for a collapsed, focused cursor;
     // range selections keep drawSelection's highlight.
-    if (!view.hasFocus || !sel.empty) {
-      this.hide();
-      return;
-    }
+    if (!view.hasFocus || !sel.empty) return null;
 
     const coords = view.coordsAtPos(sel.head, sel.assoc || 1);
-    if (!coords) {
-      // Off-viewport (scrolled away) — nothing to draw.
+    if (!coords) return null; // off-viewport (scrolled away)
+
+    const scrollRect = view.scrollDOM.getBoundingClientRect();
+    return {
+      x: coords.left - scrollRect.left + view.scrollDOM.scrollLeft,
+      y: coords.top - scrollRect.top + view.scrollDOM.scrollTop,
+      h: coords.bottom - coords.top,
+    };
+  }
+
+  /** Measure-phase write: apply the measurement (DOM writes are safe here). */
+  private applyMeasure(m: CaretMeasure | null) {
+    if (!m) {
       this.hide();
       return;
     }
 
-    const scrollRect = view.scrollDOM.getBoundingClientRect();
-    this.targetX = coords.left - scrollRect.left + view.scrollDOM.scrollLeft;
-    this.targetY = coords.top - scrollRect.top + view.scrollDOM.scrollTop;
-    this.targetH = coords.bottom - coords.top;
+    this.targetX = m.x;
+    this.targetY = m.y;
+    this.targetH = m.h;
 
     if (!this.placed || !this.visible || this.reduceMotion.matches) {
       this.x = this.targetX;
       this.y = this.targetY;
       this.h = this.targetH;
       this.placed = true;
+      // Paint the teleport immediately — don't wait a frame for the RAF
+      // loop (which background windows may throttle to a standstill).
+      this.render();
     }
 
     this.show();
@@ -142,7 +182,7 @@ class ForgedCaret {
       this.h = this.targetH;
       this.render();
       this.setGliding(false);
-      return; // settled — no more frames until the next measure()
+      return; // settled — no more frames until the next measure
     }
 
     this.setGliding(true);
@@ -161,16 +201,11 @@ class ForgedCaret {
 
   destroy() {
     if (this.raf) cancelAnimationFrame(this.raf);
+    this.view.scrollDOM.classList.remove(FORGED_CARET_LIVE_CLASS);
     this.caret.remove();
   }
 }
 
-/** Hide the native/drawSelection carets — the forged one takes their place. */
-const forgedCaretTheme = EditorView.theme({
-  ".cm-cursorLayer": { display: "none" },
-  ".cm-content": { caretColor: "transparent" },
-});
-
 export function forgedCaret() {
-  return [ViewPlugin.fromClass(ForgedCaret), forgedCaretTheme];
+  return [ViewPlugin.fromClass(ForgedCaret)];
 }

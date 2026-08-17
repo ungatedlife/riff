@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
-const CURRENT_VERSION: u32 = 2;
+const CURRENT_VERSION: u32 = 3;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct VersionedStore {
@@ -62,6 +62,7 @@ fn migrate(from_version: u32, data: Value) -> Result<Value, String> {
         current = match version {
             0 => migrate_v0_to_v1(current)?,
             1 => migrate_v1_to_v2(current)?,
+            2 => migrate_v2_to_v3(current)?,
             _ => return Err(format!("Unknown migration version: {}", version)),
         };
         version += 1;
@@ -92,18 +93,23 @@ fn migrate_v1_to_v2(mut data: Value) -> Result<Value, String> {
     Ok(data)
 }
 
+/// v2 → v3: default text grew one step, 20px → 21px. 18 only ever existed
+/// as a short-lived interim default, so both old defaults move to 21;
+/// any other size is a user choice and stays.
+fn migrate_v2_to_v3(mut data: Value) -> Result<Value, String> {
+    if let Some(obj) = data.as_object_mut() {
+        let size = obj.get("font_size").and_then(Value::as_u64);
+        if size == Some(20) || size == Some(18) {
+            obj.insert("font_size".to_string(), Value::from(21));
+        }
+    }
+    Ok(data)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn v1_to_v2_moves_old_defaults_to_new_defaults() {
-        let data = json!({ "font_size": 16, "hide_dock_icon": false });
-        let migrated = migrate(1, data).unwrap();
-        assert_eq!(migrated["font_size"], 20);
-        assert_eq!(migrated["hide_dock_icon"], true);
-    }
 
     #[test]
     fn v1_to_v2_leaves_user_chosen_values_alone() {
@@ -118,5 +124,27 @@ mod tests {
         let data = json!({ "some/path.md": { "head": 4, "anchor": 4 } });
         let migrated = migrate(1, data.clone()).unwrap();
         assert_eq!(migrated, data);
+    }
+
+    #[test]
+    fn v2_to_v3_bumps_old_default_text_sizes_to_21() {
+        let migrated = migrate(2, json!({ "font_size": 20 })).unwrap();
+        assert_eq!(migrated["font_size"], 21);
+        let interim = migrate(2, json!({ "font_size": 18 })).unwrap();
+        assert_eq!(interim["font_size"], 21);
+    }
+
+    #[test]
+    fn v2_to_v3_leaves_user_chosen_sizes_alone() {
+        let migrated = migrate(2, json!({ "font_size": 24 })).unwrap();
+        assert_eq!(migrated["font_size"], 24);
+    }
+
+    #[test]
+    fn v1_files_chain_all_the_way_to_current_defaults() {
+        let data = json!({ "font_size": 16, "hide_dock_icon": false });
+        let migrated = migrate(1, data).unwrap();
+        assert_eq!(migrated["font_size"], 21);
+        assert_eq!(migrated["hide_dock_icon"], true);
     }
 }

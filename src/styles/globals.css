@@ -205,7 +205,7 @@ body,
 }
 .riff-fullscreen .riff-editor {
   line-height: 1.7;
-  max-width: min(40rem, 88%);
+  max-width: min(44rem, 90%);
   margin-inline: auto;
   padding-top: clamp(48px, 12vh, 140px);
   padding-bottom: 33vh; /* room to breathe past the last line */
@@ -215,6 +215,16 @@ body,
 :root {
   --forged-caret-color: #650f70;
   --forged-caret-glow: rgba(101, 15, 112, 0.4);
+}
+
+/* The native caret hides only while the forged caret plugin is alive: the
+   plugin owns this class (added on create, removed on destroy), so if it
+   ever crashes, writing degrades to the native caret — never to no caret. */
+.cm-scroller.forged-caret-live .cm-cursorLayer {
+  display: none;
+}
+.cm-scroller.forged-caret-live .cm-content {
+  caret-color: transparent;
 }
 [data-theme="dark"] {
   --forged-caret-color: #a000eb;

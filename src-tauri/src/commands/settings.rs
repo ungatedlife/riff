@@ -37,7 +37,7 @@ fn default_window_opacity() -> f64 {
 }
 
 fn default_font_size() -> u32 {
-    20
+    21
 }
 
 fn default_true() -> bool {
@@ -98,7 +98,7 @@ impl Default for RiffSettings {
             quickies_file: None,
             hide_dock_icon: true,
             system_shortcuts: default_system_shortcuts(),
-            font_size: 20,
+            font_size: 21,
             window_size: None,
             window_position: None,
             text_direction: "auto".to_string(),

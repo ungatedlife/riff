@@ -352,7 +352,6 @@ export const en = {
   "publish.action": "Publish this riff (⌘↩)",
   "publish.nothing": "Nothing to publish yet",
   "publish.noVault": "Pick a vault folder in Settings first",
-  "publish.confirmHint": "⌘↩ to publish · esc to keep riffing",
   "publish.publishing": "Publishing…",
   "publish.done": "In the vault",
   "palette.empty": "No drafts. Everything's published.",

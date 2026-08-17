@@ -412,19 +412,38 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         },
       });
 
-      // Autocomplete: wiki-links ([[)
+      // Autocomplete: wiki-links ([[) offer the whole Obsidian vault plus
+      // unpublished drafts, so a riff can reference people and ideas that
+      // already live in the vault — the links are live the moment it lands.
       const combinedAutocomplete = autocompletion({
         override: [
           wikiLinkCompletionSource(async (query: string) => {
-            try {
-              const results = await invoke<SearchResult[]>("search_notes", { query });
-              return results.slice(0, 8).map((r) => ({
-                slug: filenameToSlug(r.filename),
-                path: r.path,
-              }));
-            } catch {
-              return [];
+            const [vaultLinks, drafts] = await Promise.all([
+              invoke<{ name: string; path: string }[]>("search_vault_links", {
+                query,
+              }).catch(() => []),
+              invoke<SearchResult[]>("search_notes", { query }).catch(
+                () => [] as SearchResult[],
+              ),
+            ]);
+
+            // Vault notes first — they're the canon links resolve against.
+            const seen = new Set<string>();
+            const merged: { slug: string; path: string }[] = [];
+            for (const v of vaultLinks) {
+              const key = v.name.toLowerCase();
+              if (seen.has(key)) continue;
+              seen.add(key);
+              merged.push({ slug: v.name, path: v.path });
             }
+            for (const r of drafts) {
+              const slug = filenameToSlug(r.filename);
+              const key = slug.toLowerCase();
+              if (seen.has(key)) continue;
+              seen.add(key);
+              merged.push({ slug, path: r.path });
+            }
+            return merged.slice(0, 12);
           }),
         ],
         activateOnTyping: true,

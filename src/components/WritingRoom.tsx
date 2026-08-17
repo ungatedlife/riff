@@ -83,7 +83,7 @@ export default function WritingRoom({
   const [toast, setToast] = useState<string | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [publishState, setPublishState] = useState<
-    "idle" | "confirm" | "publishing" | "done"
+    "idle" | "publishing" | "done"
   >("idle");
   const [pendingTitle, setPendingTitle] = useState("");
   const [vaultDir, setVaultDir] = useState<string | null>(null);
@@ -653,7 +653,7 @@ export default function WritingRoom({
 
   // ── Publish ritual ────────────────────────────────────────────────
 
-  // Hold the window open while confirming/publishing — the room otherwise
+  // Hold the window open while publishing — the room otherwise
   // auto-hides on blur once the editor empties.
   useEffect(() => {
     (window as unknown as { __riffHoldOpen?: boolean }).__riffHoldOpen =
@@ -664,7 +664,10 @@ export default function WritingRoom({
     };
   }, [publishState]);
 
-  const requestPublish = useCallback(() => {
+  // One ⌘↩ goes straight from the last word to the confetti — no confirm
+  // step between the writer and the ship.
+  const requestPublish = useCallback(async () => {
+    if (publishState !== "idle") return; // a publish is already in flight
     const currentContent = getLiveContent();
     if (isMarkdownEffectivelyEmpty(currentContent)) {
       showToast(t("publish.nothing"));
@@ -683,11 +686,6 @@ export default function WritingRoom({
         .replace(/[*_`~=]/g, "")
         .trim(),
     );
-    setPublishState("confirm");
-  }, [getLiveContent, vaultDir, showToast, t]);
-
-  const confirmPublish = useCallback(async () => {
-    const currentContent = getLiveContent();
     setPublishState("publishing");
     try {
       let path = currentDraftPath;
@@ -709,8 +707,17 @@ export default function WritingRoom({
       console.error("Failed to publish riff:", error);
       setPublishState("idle");
       showToast(String(error));
+      setTimeout(() => editorRef.current?.focus(), 50);
     }
-  }, [currentDraftPath, getLiveContent, onSave, showToast]);
+  }, [
+    publishState,
+    currentDraftPath,
+    getLiveContent,
+    onSave,
+    vaultDir,
+    showToast,
+    t,
+  ]);
 
   // After the confetti fades: reset the room and hide the window, dropping
   // the writer right back where they were before the riff sesh.
@@ -730,27 +737,6 @@ export default function WritingRoom({
     setPublishState("idle");
     await onClose();
   }, [onClose, onContentChange]);
-
-  // Keys for the confirm overlay: Enter/⌘↩ publishes, Escape keeps riffing.
-  useEffect(() => {
-    if (publishState !== "confirm") return;
-
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        e.stopPropagation();
-        void confirmPublish();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        setPublishState("idle");
-        setTimeout(() => editorRef.current?.focus(), 50);
-      }
-    };
-
-    window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
-  }, [publishState, confirmPublish]);
 
   const startDrag = useCallback(async (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
@@ -1117,7 +1103,7 @@ export default function WritingRoom({
             </div>
         )}
 
-        {/* Publish overlay: confirm → publishing → done (confetti!) */}
+        {/* Publish overlay: publishing → done (confetti!) */}
         {publishState === "done" && <ConfettiBurst onDone={() => void finishPublish()} />}
         {publishState !== "idle" && (
           <div className="absolute inset-0 z-[220] flex items-center justify-center bg-bg/90 backdrop-blur-sm">
@@ -1160,15 +1146,9 @@ export default function WritingRoom({
                 <p className="text-ink text-sm font-semibold max-w-[380px] truncate">
                   {pendingTitle || t("publish.button")}
                 </p>
-                {publishState === "publishing" ? (
-                  <p className="text-stone text-xs animate-pulse">
-                    {t("publish.publishing")}
-                  </p>
-                ) : (
-                  <p className="text-stone text-xs">
-                    {t("publish.confirmHint")}
-                  </p>
-                )}
+                <p className="text-stone text-xs animate-pulse">
+                  {t("publish.publishing")}
+                </p>
               </div>
             )}
           </div>
