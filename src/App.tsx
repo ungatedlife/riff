@@ -2,7 +2,7 @@ import { useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import PostIt from "./components/PostIt";
+import WritingRoom from "./components/WritingRoom";
 import SettingsModal from "./components/SettingsModal";
 import CommandPalette from "./components/CommandPalette";
 import { useTheme } from "./hooks/useTheme";
@@ -178,7 +178,7 @@ export default function App() {
   }
 
   return (
-    <PostIt
+    <WritingRoom
       onSave={handleSave}
       onClose={handleClose}
       onOpenSettings={handleOpenSettings}

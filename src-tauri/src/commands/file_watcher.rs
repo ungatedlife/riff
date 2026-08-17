@@ -11,7 +11,7 @@ use super::index::NoteIndex;
 
 static WATCHER_RUNNING: OnceLock<()> = OnceLock::new();
 
-/// Start watching the Stik root directory for .md file changes.
+/// Start watching the Riff root directory for .md file changes.
 /// No-ops if already running or if root cannot be resolved.
 pub fn start(app: AppHandle) {
     if WATCHER_RUNNING.set(()).is_err() {
@@ -27,7 +27,7 @@ pub fn start(app: AppHandle) {
     };
 
     std::thread::Builder::new()
-        .name("stik-file-watcher".to_string())
+        .name("riff-file-watcher".to_string())
         .spawn(move || run(app, root))
         .ok();
 }

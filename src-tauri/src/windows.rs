@@ -272,14 +272,14 @@ mod tests {
     #[test]
     fn remember_last_note_updates_state_for_shortcuts() {
         let state = AppState::new();
-        remember_last_note(&state, "/tmp/stik/foo.md");
+        remember_last_note(&state, "/tmp/riff/foo.md");
 
         let last = state
             .last_saved_note
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let note = last.as_ref().expect("last note should be set");
-        assert_eq!(note.path, "/tmp/stik/foo.md");
+        assert_eq!(note.path, "/tmp/riff/foo.md");
     }
 
     #[test]

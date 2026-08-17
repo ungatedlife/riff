@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Stik",
-  "version": "0.8.0",
-  "identifier": "com.stik.app",
+  "productName": "Riff",
+  "version": "0.1.0",
+  "identifier": "media.ungated.riff",
   "build": {
     "beforeBuildCommand": "npm run build",
     "beforeDevCommand": "npm run dev",
@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Stik",
+        "title": "Riff",
         "width": 680,
         "height": 540,
         "minWidth": 480,
@@ -33,12 +33,7 @@
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: http://asset.localhost https://asset.localhost https: http:; connect-src ipc: http://ipc.localhost",
       "assetProtocol": {
         "enable": true,
-        "scope": [
-          "$DOCUMENT/Stik/**",
-          "$DOCUMENT/Stik/**/.assets/**",
-          "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Stik/**",
-          "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Stik/**/.assets/**"
-        ]
+        "scope": ["$DOCUMENT/Riff/**", "$DOCUMENT/Riff/**/.assets/**"]
       }
     }
   },
@@ -60,8 +55,7 @@
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/icon.icns"
     ],
     "macOS": {
       "minimumSystemVersion": "10.15",

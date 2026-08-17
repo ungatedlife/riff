@@ -195,7 +195,7 @@ function computeEditorTokens(colors: ThemeColors, isDark: boolean) {
     "--editor-highlight-bg": `rgba(${highlightRgb.split(" ").join(", ")}, ${highlightOpacity})`,
     "--vim-visual-selection": `rgba(${colors.accent.split(" ").join(", ")}, ${isDark ? 0.2 : 0.12})`,
     "--overlay-bg": isDark ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.6)",
-    "--shadow-stik": isDark
+    "--shadow-riff": isDark
       ? `0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06)`
       : `0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.04)`,
     "--shadow-coral-sm": `0 4px 16px rgba(${colors.accent.split(" ").join(", ")}, ${isDark ? 0.2 : 0.25})`,

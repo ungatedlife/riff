@@ -39,7 +39,7 @@
   --overlay-bg: rgba(0, 0, 0, 0.6);
 
   /* Shadows */
-  --shadow-stik: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-riff: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.04);
   --shadow-coral-sm: 0 4px 16px rgba(232, 112, 95, 0.25);
   --shadow-coral-lg: 0 8px 24px rgba(232, 112, 95, 0.35);
 
@@ -78,7 +78,7 @@
 
   --overlay-bg: rgba(0, 0, 0, 0.7);
 
-  --shadow-stik: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-riff: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
   --shadow-coral-sm: 0 4px 16px rgba(232, 112, 95, 0.20);
   --shadow-coral-lg: 0 8px 24px rgba(232, 112, 95, 0.30);
 
@@ -118,7 +118,7 @@ body,
 }
 
 /* CodeMirror Editor Styles */
-.stik-editor {
+.riff-editor {
   font-size: var(--editor-font-size, 14px);
   font-family: var(--editor-font-family, inherit);
   line-height: 1.5;
@@ -130,7 +130,7 @@ body,
   outline-offset: -2px;
 }
 
-.stik-editor:focus-visible {
+.riff-editor:focus-visible {
   outline: 2px solid rgb(var(--color-coral));
   outline-offset: -2px;
 }
@@ -257,7 +257,7 @@ body,
 }
 
 /* Vim mode — @replit/codemirror-vim handles cursor styles.
-   Override visual selection color to match Stik theme. */
+   Override visual selection color to match Riff theme. */
 .cm-vim-panel input {
   font-family: Monaco, Consolas, monospace;
   font-size: 12px;

@@ -27,7 +27,7 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
     <div
       className={`
         fixed bottom-6 left-1/2 -translate-x-1/2 z-[250]
-        px-4 py-2.5 rounded-xl shadow-stik
+        px-4 py-2.5 rounded-xl shadow-riff
         text-[13px] font-medium bg-ink text-bg
         transition-all duration-200 ease-out
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}

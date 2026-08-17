@@ -22,7 +22,7 @@ export interface CustomThemeDefinition {
   colors: ThemeColors;
 }
 
-export interface StikSettings {
+export interface RiffSettings {
   theme_mode: string;
   /** Absolute path of the drafts directory. Empty/undefined = ~/Documents/Riff. */
   drafts_dir?: string | null;

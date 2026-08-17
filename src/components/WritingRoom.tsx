@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import Editor, { type EditorRef } from "./Editor";
-import type { StikSettings } from "@/types";
+import type { RiffSettings } from "@/types";
 import {
   isMarkdownEffectivelyEmpty,
   normalizeMarkdownForCopy,
@@ -20,7 +20,7 @@ import { formatShortcutDisplay } from "./ShortcutRecorder";
 import { loadGoogleFont, loadCustomFont } from "@/utils/fonts";
 import { useTranslation } from "@/hooks/useTranslation";
 
-interface PostItProps {
+interface WritingRoomProps {
   onSave: (content: string) => Promise<string | undefined | void>;
   onClose: () => void;
   onOpenSettings?: () => void;
@@ -55,7 +55,7 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
     <div
       className={`
         fixed bottom-6 left-1/2 -translate-x-1/2 z-[250]
-        px-4 py-2.5 rounded-xl shadow-stik
+        px-4 py-2.5 rounded-xl shadow-riff
         text-[13px] font-medium bg-ink text-bg
         transition-all duration-200 ease-out
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}
@@ -66,12 +66,12 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   );
 }
 
-export default function PostIt({
+export default function WritingRoom({
   onSave,
   onClose,
   onOpenSettings,
   onContentChange,
-}: PostItProps) {
+}: WritingRoomProps) {
   const { t } = useTranslation();
   const [content, setContent] = useState("");
   // Path of the draft currently loaded into the room; null = fresh riff.
@@ -101,7 +101,7 @@ export default function PostIt({
   const [zenMode, setZenMode] = useState(false);
   const [formatToolbar, setFormatToolbar] = useState(() => {
     try {
-      return localStorage.getItem("stik:format-toolbar") !== "0";
+      return localStorage.getItem("riff:format-toolbar") !== "0";
     } catch {
       return true;
     }
@@ -222,7 +222,7 @@ export default function PostIt({
 
   // Fetch vim mode + folder colors + folder list on mount + listen for changes
   useEffect(() => {
-    invoke<StikSettings>("get_settings")
+    invoke<RiffSettings>("get_settings")
       .then((s) => {
         setFontSize(s.font_size ?? 16);
         setFontFamily(s.font_family ?? null);
@@ -239,7 +239,7 @@ export default function PostIt({
         setSettingsLoaded(true);
       });
 
-    const unlisten = listen<StikSettings>("settings-changed", (event) => {
+    const unlisten = listen<RiffSettings>("settings-changed", (event) => {
       setFontSize(event.payload.font_size ?? 16);
       setFontFamily(event.payload.font_family ?? null);
       setWindowOpacity(event.payload.window_opacity ?? 1.0);
@@ -524,11 +524,11 @@ export default function PostIt({
       if (newSize !== null && newSize !== fontSize) {
         e.preventDefault();
         setFontSize(newSize);
-        invoke<StikSettings>("get_settings")
+        invoke<RiffSettings>("get_settings")
           .then((s) =>
             invoke("save_settings", { settings: { ...s, font_size: newSize } }),
           )
-          .then(() => invoke<StikSettings>("get_settings"))
+          .then(() => invoke<RiffSettings>("get_settings"))
           .then((s) => getCurrentWindow().emit("settings-changed", s))
           .catch(() => {});
       } else if (newSize !== null) {
@@ -951,7 +951,7 @@ export default function PostIt({
                   </button>
 
                   {isCopyMenuOpen && (
-                    <div className="absolute top-full right-0 mt-1 w-40 rounded-lg border border-line bg-bg shadow-stik overflow-hidden z-[240]">
+                    <div className="absolute top-full right-0 mt-1 w-40 rounded-lg border border-line bg-bg shadow-riff overflow-hidden z-[240]">
                       <button
                         onClick={() => void handleCopy("rich")}
                         className="w-full px-3 py-2 text-left text-[11px] text-ink hover:bg-line/50 transition-colors"
@@ -1036,7 +1036,7 @@ export default function PostIt({
                         setFormatToolbar(next);
                         try {
                           localStorage.setItem(
-                            "stik:format-toolbar",
+                            "riff:format-toolbar",
                             next ? "1" : "0",
                           );
                         } catch {}

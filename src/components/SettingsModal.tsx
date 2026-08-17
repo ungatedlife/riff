@@ -4,7 +4,7 @@ import { emit } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import SettingsContent from "./SettingsContent";
 import type { SettingsTab } from "./SettingsContent";
-import type { StikSettings } from "@/types";
+import type { RiffSettings } from "@/types";
 import { createCoalescedTaskRunner } from "@/utils/coalescedTaskRunner";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
@@ -109,14 +109,14 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
-  const [settings, setSettings] = useState<StikSettings | null>(null);
+  const [settings, setSettings] = useState<RiffSettings | null>(null);
   const [appVersion, setAppVersion] = useState("");
 
   const [resolvedNotesDir, setResolvedNotesDir] = useState("");
 
   useEffect(() => {
     if (isOpen) {
-      invoke<StikSettings>("get_settings").then(setSettings);
+      invoke<RiffSettings>("get_settings").then(setSettings);
       invoke<string>("get_drafts_directory")
         .then(setResolvedNotesDir)
         .catch(() => {});
@@ -146,7 +146,7 @@ export default function SettingsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  const performSave = useCallback(async (settingsToSave: StikSettings) => {
+  const performSave = useCallback(async (settingsToSave: RiffSettings) => {
     try {
       await invoke("save_settings", { settings: settingsToSave });
       await invoke("reload_shortcuts");
@@ -171,7 +171,7 @@ export default function SettingsModal({
   }, []);
   const saveQueueRef = useRef(createCoalescedTaskRunner(performSave));
 
-  const handleSettingsChange = useCallback((newSettings: StikSettings) => {
+  const handleSettingsChange = useCallback((newSettings: RiffSettings) => {
     setSettings(newSettings);
     hasPendingRef.current = true;
 
@@ -305,7 +305,7 @@ export default function SettingsModal({
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
       <div
-        className="bg-bg rounded-[14px] max-h-[85vh] flex flex-col shadow-stik overflow-hidden border border-line/50"
+        className="bg-bg rounded-[14px] max-h-[85vh] flex flex-col shadow-riff overflow-hidden border border-line/50"
         style={{
           width: `min(96vw, ${SETTINGS_MODAL_MAX_WIDTH}px)`,
           minWidth: `min(96vw, ${SETTINGS_MODAL_MIN_WIDTH}px)`,

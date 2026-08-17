@@ -5,7 +5,7 @@ import ShortcutRecorder from "./ShortcutRecorder";
 import type {
   CustomFontEntry,
   CustomThemeDefinition,
-  StikSettings,
+  RiffSettings,
   ThemeColors,
 } from "@/types";
 import ConfirmDialog from "./ConfirmDialog";
@@ -79,7 +79,7 @@ export function Dropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-bg border border-line rounded-lg shadow-stik overflow-hidden max-h-[220px] overflow-y-auto">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-bg border border-line rounded-lg shadow-riff overflow-hidden max-h-[220px] overflow-y-auto">
           {allOptions.map((option) => (
             <button
               key={option.value}
@@ -106,8 +106,8 @@ export type SettingsTab = "appearance" | "shortcuts" | "publishing" | "about";
 
 interface SettingsContentProps {
   activeTab: SettingsTab;
-  settings: StikSettings;
-  onSettingsChange: (settings: StikSettings) => void;
+  settings: RiffSettings;
+  onSettingsChange: (settings: RiffSettings) => void;
   resolvedNotesDir: string;
   appVersion?: string;
 }
@@ -134,7 +134,7 @@ function SettingsToast({
     <div
       className={`
         fixed bottom-6 left-1/2 -translate-x-1/2 z-[250]
-        px-4 py-2.5 rounded-xl shadow-stik
+        px-4 py-2.5 rounded-xl shadow-riff
         text-[13px] font-medium bg-ink text-bg
         transition-all duration-200 ease-out
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}
@@ -429,8 +429,8 @@ function AppearanceSection({
   settings,
   onSettingsChange,
 }: {
-  settings: StikSettings;
-  onSettingsChange: (settings: StikSettings) => void;
+  settings: RiffSettings;
+  onSettingsChange: (settings: RiffSettings) => void;
 }) {
   const { t } = useTranslation();
   const [editingTheme, setEditingTheme] =
@@ -484,7 +484,7 @@ function AppearanceSection({
   const removeCustomFont = (path: string) => {
     const entry = customFonts.find((f) => f.path === path);
     const updated = customFonts.filter((f) => f.path !== path);
-    const patch: Partial<StikSettings> = { custom_fonts: updated };
+    const patch: Partial<RiffSettings> = { custom_fonts: updated };
     // Clear font_family if it was using the removed font
     if (entry && settings.font_family === entry.name) {
       patch.font_family = null;
@@ -545,7 +545,7 @@ function AppearanceSection({
   const deleteTheme = (id: string) => {
     const theme = customThemes.find((t) => t.id === id);
     const updated = customThemes.filter((t) => t.id !== id);
-    const newSettings: Partial<StikSettings> = { custom_themes: updated };
+    const newSettings: Partial<RiffSettings> = { custom_themes: updated };
 
     if (activeTheme === id) {
       newSettings.active_theme = "system";

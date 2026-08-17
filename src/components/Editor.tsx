@@ -1,5 +1,5 @@
 /**
- * CodeMirror 6 editor for Stik — raw markdown editing with syntax highlighting.
+ * CodeMirror 6 editor for Riff — raw markdown editing with syntax highlighting.
  *
  * Same EditorRef/EditorProps interface as the old TipTap editor so PostIt.tsx
  * can swap in with minimal changes.
@@ -28,7 +28,7 @@ import { search, searchKeymap } from "@codemirror/search";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
-import { stikEditorTheme, stikHighlightStyle } from "@/extensions/cm-theme";
+import { riffEditorTheme, riffHighlightStyle } from "@/extensions/cm-theme";
 import {
   toggleInlineFormat,
   insertLink,
@@ -487,8 +487,8 @@ const Editor = forwardRef<EditorRef, EditorProps>(
             },
           ],
         }),
-        stikEditorTheme,
-        stikHighlightStyle,
+        riffEditorTheme,
+        riffHighlightStyle,
         drawSelection(),
         placeholderCompartment.of(cmPlaceholder(placeholderText)),
         search(),
@@ -510,7 +510,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         bidiSupport(textDirection),
         EditorView.lineWrapping,
         // CSS class for the content element
-        EditorView.contentAttributes.of({ class: "stik-editor" }),
+        EditorView.contentAttributes.of({ class: "riff-editor" }),
       ];
 
       const state = EditorState.create({

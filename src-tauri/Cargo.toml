@@ -1,8 +1,8 @@
 [package]
-name = "stik"
-version = "0.8.0"
-description = "Instant thought capture"
-authors = ["Massi"]
+name = "riff"
+version = "0.1.0"
+description = "A quiet room for writing one small, complete thing at a time"
+authors = ["Rob Hardy"]
 edition = "2021"
 
 [build-dependencies]

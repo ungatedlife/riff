@@ -1,7 +1,7 @@
 {
-  "name": "stik",
-  "version": "0.8.0",
-  "description": "Instant thought capture. One shortcut, post-it appears, type, close.",
+  "name": "riff",
+  "version": "0.1.0",
+  "description": "A quiet room for writing one small, complete thing at a time.",
   "type": "module",
   "scripts": {
     "dev": "vite",

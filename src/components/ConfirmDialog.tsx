@@ -35,7 +35,7 @@ export default function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-bg rounded-xl border border-line shadow-stik w-[min(90vw,320px)] flex flex-col items-center p-6">
+      <div className="bg-bg rounded-xl border border-line shadow-riff w-[min(90vw,320px)] flex flex-col items-center p-6">
         <div className="w-10 h-10 mb-3 text-coral">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 6h18" />

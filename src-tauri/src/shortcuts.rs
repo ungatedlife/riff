@@ -1,4 +1,4 @@
-use crate::commands::settings::{self, StikSettings};
+use crate::commands::settings::{self, RiffSettings};
 use crate::state::AppState;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
@@ -201,7 +201,7 @@ pub fn shortcut_to_string(shortcut: &Shortcut) -> String {
     parts.join("+")
 }
 
-pub fn register_shortcuts_from_settings(app: &AppHandle, settings: &StikSettings) {
+pub fn register_shortcuts_from_settings(app: &AppHandle, settings: &RiffSettings) {
     let state = app.state::<AppState>();
 
     // Register system shortcuts from settings

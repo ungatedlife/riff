@@ -45,7 +45,7 @@ fn default_text_direction() -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StikSettings {
+pub struct RiffSettings {
     #[serde(default)]
     pub theme_mode: String,
     /// Absolute path of the drafts directory. None/empty = ~/Documents/Riff.
@@ -80,7 +80,7 @@ pub struct StikSettings {
     pub custom_fonts: Vec<CustomFontEntry>,
 }
 
-impl Default for StikSettings {
+impl Default for RiffSettings {
     fn default() -> Self {
         Self {
             theme_mode: String::new(),
@@ -149,7 +149,7 @@ fn is_valid_active_theme(active_theme: &str, custom_themes: &[CustomThemeDefinit
         || custom_themes.iter().any(|theme| theme.id == active_theme)
 }
 
-fn normalize_loaded_settings(mut settings: StikSettings) -> StikSettings {
+fn normalize_loaded_settings(mut settings: RiffSettings) -> RiffSettings {
     normalize_system_shortcuts(&mut settings.system_shortcuts);
 
     if settings.active_theme.is_empty() && is_legacy_theme_mode(&settings.theme_mode) {
@@ -169,36 +169,36 @@ fn normalize_loaded_settings(mut settings: StikSettings) -> StikSettings {
 
 fn get_settings_path() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or("Could not find home directory")?;
-    let stik_config = home.join(".stik");
-    fs::create_dir_all(&stik_config).map_err(|e| e.to_string())?;
-    Ok(stik_config.join("settings.json"))
+    let riff_config = home.join(".riff");
+    fs::create_dir_all(&riff_config).map_err(|e| e.to_string())?;
+    Ok(riff_config.join("settings.json"))
 }
 
-pub(crate) fn load_settings_from_file() -> Result<StikSettings, String> {
+pub(crate) fn load_settings_from_file() -> Result<RiffSettings, String> {
     let path = get_settings_path()?;
 
-    match versioning::load_versioned::<StikSettings>(&path)? {
+    match versioning::load_versioned::<RiffSettings>(&path)? {
         Some(settings) => Ok(normalize_loaded_settings(settings)),
         None => {
-            let default_settings = StikSettings::default();
+            let default_settings = RiffSettings::default();
             save_settings_to_file(&default_settings)?;
             Ok(default_settings)
         }
     }
 }
 
-fn save_settings_to_file(settings: &StikSettings) -> Result<(), String> {
+fn save_settings_to_file(settings: &RiffSettings) -> Result<(), String> {
     let path = get_settings_path()?;
     versioning::save_versioned(&path, settings)
 }
 
 #[tauri::command]
-pub fn get_settings() -> Result<StikSettings, String> {
+pub fn get_settings() -> Result<RiffSettings, String> {
     load_settings_from_file()
 }
 
 #[tauri::command]
-pub fn save_settings(settings: StikSettings) -> Result<bool, String> {
+pub fn save_settings(settings: RiffSettings) -> Result<bool, String> {
     save_settings_to_file(&settings)?;
     Ok(true)
 }
@@ -373,11 +373,11 @@ pub fn export_theme_file(
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_loaded_settings, parse_color_value, StikSettings};
+    use super::{normalize_loaded_settings, parse_color_value, RiffSettings};
 
     #[test]
     fn normalization_falls_back_to_legacy_theme_mode_when_active_theme_is_invalid() {
-        let mut settings = StikSettings::default();
+        let mut settings = RiffSettings::default();
         settings.theme_mode = "dark".to_string();
         settings.active_theme = "removed-custom-theme".to_string();
 

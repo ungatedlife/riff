@@ -1,8 +1,11 @@
-<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Shadow -->
-  <path d="M20 28a10 10 0 0 1 10-10h50l36 36v58a10 10 0 0 1-10 10H30a10 10 0 0 1-10-10V28z" fill="#1A1A1A" fill-opacity="0.1"/>
-  <!-- Body -->
-  <path d="M16 22a10 10 0 0 1 10-10h50l36 36v58a10 10 0 0 1-10 10H26a10 10 0 0 1-10-10V22z" fill="#E8705F"/>
-  <!-- Fold -->
-  <path d="M76 12l36 36H86a10 10 0 0 1-10-10V12z" fill="#D6604F"/>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="riff-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E8705F"/>
+      <stop offset="1" stop-color="#D6604F"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#riff-bg)"/>
+  <path d="M26 78 C 38 54, 46 54, 55 68 S 71 92, 81 70 S 93 46, 102 56"
+        fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round"/>
 </svg>

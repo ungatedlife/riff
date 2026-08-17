@@ -5,8 +5,8 @@ use tauri::tray::TrayIconBuilder;
 use tauri::App;
 
 pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
-    let quit = MenuItem::with_id(app, "quit", "Quit Stik", true, None::<&str>)?;
-    let new_note = MenuItem::with_id(app, "new_note", "New Note", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Riff", true, None::<&str>)?;
+    let new_note = MenuItem::with_id(app, "new_note", "New Riff", true, None::<&str>)?;
 
     let menu = Menu::with_items(app, &[&new_note, &quit])?;
 
