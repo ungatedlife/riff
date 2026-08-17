@@ -27,6 +27,24 @@
         "skipTaskbar": true,
         "visible": false,
         "center": true
+      },
+      {
+        "label": "quickie",
+        "title": "Quickie",
+        "url": "index.html?window=quickie",
+        "width": 420,
+        "height": 230,
+        "minWidth": 320,
+        "minHeight": 160,
+        "maxWidth": 640,
+        "maxHeight": 400,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": true
       }
     ],
     "security": {

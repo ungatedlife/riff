@@ -368,7 +368,15 @@ export const en = {
     "A quiet room for writing one small, complete thing at a time.",
   "settings.about.credit":
     "Riff is built on Riff by Massi (MIT). The live-preview markdown editor and the writing feel are his craft.",
+  "quickie.title": "Quickie",
+  "quickie.placeholder": "A fleeting thought…",
+  "quickie.captureHint": "Capture and close (esc)",
+  "settings.quickiesFile": "Quickies note",
+  "settings.quickiesFile.none": "<vault>/Quickies.md",
+  "settings.quickiesFile.describe":
+    "Every quickie is appended to this one running note with a timestamp. Leave it unset to use Quickies.md at the top of your vault.",
   "shortcut.summon": "New riff",
+  "shortcut.quickie": "New quickie",
   "shortcut.search": "Command Palette",
   "shortcut.manager": "Command Palette (alt)",
   "shortcut.settings": "Settings",

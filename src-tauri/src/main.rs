@@ -8,12 +8,14 @@ mod tray;
 mod windows;
 
 use commands::index::NoteIndex;
-use commands::{cursor_positions, file_watcher, index, notes, publish, settings, share, storage};
+use commands::{
+    cursor_positions, file_watcher, index, notes, publish, quickies, settings, share, storage,
+};
 use shortcuts::shortcut_to_string;
 use state::AppState;
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri_plugin_global_shortcut::ShortcutState;
-use windows::{show_command_palette, show_main, show_settings};
+use windows::{show_command_palette, show_main, show_quickie, show_settings};
 
 fn handle_opened_files(app: &AppHandle, paths: Vec<std::path::PathBuf>) {
     for path in paths {
@@ -61,6 +63,10 @@ fn main() {
                                     show_main(app);
                                     return;
                                 }
+                                "quickie" => {
+                                    show_quickie(app);
+                                    return;
+                                }
                                 "search" => {
                                     show_command_palette(app);
                                     return;
@@ -103,6 +109,7 @@ fn main() {
             notes::save_note_image_from_path,
             storage::get_drafts_directory,
             publish::publish_riff,
+            quickies::append_quickie,
             index::rebuild_index,
             settings::get_settings,
             settings::save_settings,
@@ -173,6 +180,18 @@ fn main() {
                 });
             } else {
                 eprintln!("Warning: main window not found during setup");
+            }
+
+            // Quickie window: same blur contract
+            if let Some(window) = app.get_webview_window("quickie") {
+                let w = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Focused(focused) = event {
+                        if !focused {
+                            let _ = w.emit("quickie-blur", ());
+                        }
+                    }
+                });
             }
 
             Ok(())

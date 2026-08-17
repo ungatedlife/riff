@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for Riff",
-  "windows": ["main", "settings", "command-palette"],
+  "windows": ["main", "quickie", "settings", "command-palette"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

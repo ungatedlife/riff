@@ -54,6 +54,10 @@ pub struct RiffSettings {
     /// Absolute path of the vault folder finished riffs publish into.
     #[serde(default)]
     pub vault_dir: Option<String>,
+    /// Absolute path of the running note quickies append to.
+    /// None = `<vault_dir>/Quickies.md`.
+    #[serde(default)]
+    pub quickies_file: Option<String>,
     #[serde(default)]
     pub hide_dock_icon: bool,
     #[serde(default)]
@@ -86,6 +90,7 @@ impl Default for RiffSettings {
             theme_mode: String::new(),
             drafts_dir: None,
             vault_dir: None,
+            quickies_file: None,
             hide_dock_icon: false,
             system_shortcuts: default_system_shortcuts(),
             font_size: 16,
@@ -104,7 +109,9 @@ impl Default for RiffSettings {
 
 pub fn default_system_shortcuts() -> HashMap<String, String> {
     HashMap::from([
-        ("summon".to_string(), "Cmd+Shift+R".to_string()),
+        // Hyper (Cmd+Ctrl+Alt+Shift) + R/Q — pairs with a Caps Lock hyper key.
+        ("summon".to_string(), "Cmd+Ctrl+Alt+Shift+R".to_string()),
+        ("quickie".to_string(), "Cmd+Ctrl+Alt+Shift+Q".to_string()),
         ("search".to_string(), "Cmd+Shift+P".to_string()),
         ("settings".to_string(), "Cmd+Shift+Comma".to_string()),
         ("last_note".to_string(), "Cmd+Shift+L".to_string()),

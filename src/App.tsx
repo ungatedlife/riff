@@ -3,17 +3,22 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import WritingRoom from "./components/WritingRoom";
+import Quickie from "./components/Quickie";
 import SettingsModal from "./components/SettingsModal";
 import CommandPalette from "./components/CommandPalette";
 import { useTheme } from "./hooks/useTheme";
 import { isMarkdownEffectivelyEmpty } from "@/utils/normalizeMarkdownForCopy";
 import { shouldHideCaptureOnBlur } from "@/utils/blurAutoHide";
 
-type WindowType = "main" | "settings" | "command-palette";
+type WindowType = "main" | "quickie" | "settings" | "command-palette";
 
 function getWindowInfo(): { type: WindowType } {
   const params = new URLSearchParams(window.location.search);
   const windowType = params.get("window");
+
+  if (windowType === "quickie") {
+    return { type: "quickie" };
+  }
 
   if (windowType === "settings") {
     return { type: "settings" };
@@ -168,6 +173,10 @@ export default function App() {
       console.error("Failed to open settings:", error);
     }
   }, []);
+
+  if (windowInfo.type === "quickie") {
+    return <Quickie />;
+  }
 
   if (windowInfo.type === "settings") {
     return <SettingsModal isOpen={true} onClose={() => {}} isWindow={true} />;

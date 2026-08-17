@@ -28,6 +28,8 @@ export interface RiffSettings {
   drafts_dir?: string | null;
   /** Absolute path of the vault folder finished riffs publish into. */
   vault_dir?: string | null;
+  /** Absolute path of the running note quickies append to. Empty = <vault>/Quickies.md. */
+  quickies_file?: string | null;
   hide_dock_icon: boolean;
   system_shortcuts: Record<string, string>;
   font_size: number;

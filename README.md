@@ -13,19 +13,24 @@ feels alive, sitting with it for two or ten minutes, and shipping it —
 imperfect, complete, out the door. Not quick capture. Not a second brain.
 A writing room with one exit: **Publish**.
 
-## The ritual
+## Two modes
 
-1. **Summon** — `⌘⇧R` opens the room from anywhere.
-2. **Riff** — an Obsidian-style live markdown editor: rendered headings,
-   hidden syntax markers, task lists, tables, inline images,
-   `==highlights==`, `[[wiki-links]]` between drafts. `⌘.` for zen mode.
-3. **Publish** — `⌘↩` stamps the riff with a title and date, moves it
-   (images included) into your Obsidian vault, and clears the room. Your
-   site's pipeline takes it from there.
+**Riff** — deep capture. `Hyper+R` (⌘⌃⌥⇧R, made for a Caps Lock hyper key)
+summons the writing room: an Obsidian-style live markdown editor with
+rendered headings, hidden syntax markers, task lists, tables, inline
+images, `==highlights==`, and `[[wiki-links]]` between drafts. `⌘.` for
+zen mode. When it's complete-enough, `⌘↩` publishes: title and date
+stamped, images included, straight into your Obsidian vault, room cleared.
+
+**Quickie** — quick capture. `Hyper+Q` pops a small always-on-top post-it
+for a fleeting thought. `esc` (or `⌘↩`) appends it, timestamped, to one
+running note in your vault (`Quickies.md` by default) and the window is
+gone. In, out, back to whatever you were doing.
 
 Drafts are plain markdown in `~/Documents/Riff` until they're published.
-`esc` saves and hides; an emptied draft deletes itself. `⌘⇧P` lists your
-drafts, `⌘⇧L` reopens the last one, `⌘⇧,` opens settings.
+`esc` saves and hides the room; an emptied draft deletes itself. `⌘⇧P`
+lists your drafts, `⌘⇧L` reopens the last one, `⌘⇧,` opens settings.
+All shortcuts are rebindable.
 
 ## Why
 

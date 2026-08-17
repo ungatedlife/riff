@@ -1,6 +1,7 @@
 import type { TranslationKey } from "@/i18n";
 export const SYSTEM_SHORTCUT_ACTIONS = [
   "summon",
+  "quickie",
   "search",
   "settings",
   "last_note",
@@ -9,7 +10,9 @@ export const SYSTEM_SHORTCUT_ACTIONS = [
 export type SystemAction = (typeof SYSTEM_SHORTCUT_ACTIONS)[number];
 
 export const SYSTEM_SHORTCUT_DEFAULTS: Record<SystemAction, string> = {
-  summon: "Cmd+Shift+R",
+  // Hyper (Cmd+Ctrl+Alt+Shift) + R/Q — pairs with a Caps Lock hyper key.
+  summon: "Cmd+Ctrl+Alt+Shift+R",
+  quickie: "Cmd+Ctrl+Alt+Shift+Q",
   search: "Cmd+Shift+P",
   settings: "Cmd+Shift+Comma",
   last_note: "Cmd+Shift+L",
@@ -18,6 +21,7 @@ export const SYSTEM_SHORTCUT_DEFAULTS: Record<SystemAction, string> = {
 
 export const SYSTEM_SHORTCUT_LABEL_KEYS: Record<SystemAction, TranslationKey> = {
   summon: "shortcut.summon",
+  quickie: "shortcut.quickie",
   search: "shortcut.search",
   settings: "shortcut.settings",
   last_note: "shortcut.lastNote",

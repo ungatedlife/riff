@@ -186,6 +186,17 @@ pub fn show_settings(app: &AppHandle) {
     }
 }
 
+/// Summon the quickie post-it: a small always-on-top window for a fleeting
+/// thought. Centered every time — it's a scratchpad, not a room.
+pub fn show_quickie(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("quickie") {
+        let _ = window.center();
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.emit("quickie-summoned", ());
+    }
+}
+
 #[tauri::command]
 pub fn hide_window(window: tauri::Window) {
     let _ = window.hide();
