@@ -24,9 +24,9 @@ jobs:
       # secrets aren't allowed in step-level `if`, so surface presence here
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -69,7 +69,7 @@ jobs:
         run: npm ci
 
       - name: Remove bun to prevent tauri-action misdetection
-        run: brew uninstall --ignore-dependencies bun || true
+        run: brew uninstall --ignore-dependencies bun >/dev/null 2>&1 || true
 
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v0
