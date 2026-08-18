@@ -1,6 +1,6 @@
 {
   "name": "riff",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A quiet room for writing one small, complete thing at a time.",
   "type": "module",
   "scripts": {
