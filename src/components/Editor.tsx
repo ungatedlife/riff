@@ -418,6 +418,14 @@ const Editor = forwardRef<EditorRef, EditorProps>(
       const combinedAutocomplete = autocompletion({
         override: [
           wikiLinkCompletionSource(async (query: string) => {
+            if (!query) {
+              // Bare [[ — offer the five most recently edited vault notes.
+              const recents = await invoke<{ name: string; path: string }[]>(
+                "search_vault_links",
+                { query: "" },
+              ).catch(() => []);
+              return recents.map((v) => ({ slug: v.name, path: v.path }));
+            }
             const [vaultLinks, drafts] = await Promise.all([
               invoke<{ name: string; path: string }[]>("search_vault_links", {
                 query,

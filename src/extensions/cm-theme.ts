@@ -56,20 +56,33 @@ export const riffEditorTheme = EditorView.theme({
     color: "var(--editor-placeholder)",
     fontStyle: "normal",
   },
-  // Wiki-link decorations
+  // Wiki-link decorations: the forged caret's purple, brackets concealed
+  // (cm-wiki-link.ts reveals them while the caret is inside the link).
   ".cm-wikilink": {
-    color: "rgb(var(--color-coral))",
-    textDecoration: "underline",
-    textDecorationStyle: "dashed",
-    textUnderlineOffset: "2px",
-    textDecorationThickness: "1px",
+    color: "var(--forged-caret-color)",
     cursor: "pointer",
-    padding: "0 1px",
     borderRadius: "2px",
     transition: "background-color 0.15s",
   },
   ".cm-wikilink:hover": {
-    backgroundColor: "rgba(232, 112, 95, 0.1)",
+    textDecoration: "underline",
+    textUnderlineOffset: "3px",
+    textDecorationThickness: "1px",
+    backgroundColor: "var(--wikilink-hover-bg)",
+  },
+  // The markdown syntax highlighter nests its own link-styled span inside
+  // the decoration ([text] parses as a link label) — force it to follow the
+  // wiki-link styling instead of coral + underline.
+  ".cm-wikilink span, .cm-wikilink-brackets span": {
+    color: "inherit !important",
+    textDecoration: "inherit !important",
+  },
+  ".cm-wikilink-editing": {
+    cursor: "text",
+  },
+  ".cm-wikilink-brackets": {
+    color: "var(--forged-caret-color)",
+    opacity: "0.45",
   },
   // Autocomplete panel
   ".cm-tooltip-autocomplete": {
@@ -80,13 +93,13 @@ export const riffEditorTheme = EditorView.theme({
     overflow: "hidden",
   },
   ".cm-tooltip-autocomplete ul": {
-    padding: "4px",
-    maxHeight: "240px",
+    padding: "5px",
+    maxHeight: "300px",
   },
   ".cm-tooltip-autocomplete ul li": {
-    padding: "6px 10px",
+    padding: "7px 12px",
     borderRadius: "6px",
-    fontSize: "13px",
+    fontSize: "15px",
     color: "rgb(var(--color-ink))",
   },
   ".cm-tooltip-autocomplete ul li[aria-selected]": {

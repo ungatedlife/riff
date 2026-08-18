@@ -215,6 +215,7 @@ body,
 :root {
   --forged-caret-color: #650f70;
   --forged-caret-glow: rgba(101, 15, 112, 0.4);
+  --wikilink-hover-bg: rgba(101, 15, 112, 0.08);
 }
 
 /* The native caret hides only while the forged caret plugin is alive: the
@@ -229,6 +230,7 @@ body,
 [data-theme="dark"] {
   --forged-caret-color: #a000eb;
   --forged-caret-glow: rgba(160, 0, 235, 0.45);
+  --wikilink-hover-bg: rgba(160, 0, 235, 0.14);
 }
 
 .forged-caret {

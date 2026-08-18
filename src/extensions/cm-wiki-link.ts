@@ -28,10 +28,22 @@ export interface WikiLinkCallbacks {
 /** Regex to find [[...]] in text */
 const WIKI_LINK_RE = /\[\[([^\]\n]+)\]\]/g;
 
-/** Build decorations for all [[...]] occurrences in the document */
+const HIDDEN_BRACKETS = Decoration.replace({});
+const LINK_MARK = Decoration.mark({ class: "cm-wikilink" });
+const EDITING_MARK = Decoration.mark({
+  class: "cm-wikilink cm-wikilink-editing",
+});
+const BRACKET_MARK = Decoration.mark({ class: "cm-wikilink-brackets" });
+
+/**
+ * Build decorations for all [[...]] occurrences. Away from the caret a link
+ * reads like a link — brackets concealed, name styled; with the caret
+ * touching it, the raw markup reveals (brackets dimmed) for editing.
+ */
 function buildWikiLinkDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
+  const sel = view.state.selection.main;
 
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i);
@@ -40,7 +52,16 @@ function buildWikiLinkDecorations(view: EditorView): DecorationSet {
     while ((match = WIKI_LINK_RE.exec(line.text)) !== null) {
       const from = line.from + match.index;
       const to = from + match[0].length;
-      builder.add(from, to, Decoration.mark({ class: "cm-wikilink" }));
+      const editing = sel.to >= from && sel.from <= to;
+      if (editing) {
+        builder.add(from, from + 2, BRACKET_MARK);
+        builder.add(from + 2, to - 2, EDITING_MARK);
+        builder.add(to - 2, to, BRACKET_MARK);
+      } else {
+        builder.add(from, from + 2, HIDDEN_BRACKETS);
+        builder.add(from + 2, to - 2, LINK_MARK);
+        builder.add(to - 2, to, HIDDEN_BRACKETS);
+      }
     }
   }
 
@@ -58,7 +79,8 @@ export function wikiLinkDecorations() {
       }
 
       update(update: ViewUpdate) {
-        if (update.docChanged || update.viewportChanged) {
+        // selectionSet too: concealment depends on where the caret stands.
+        if (update.docChanged || update.viewportChanged || update.selectionSet) {
           this.decorations = buildWikiLinkDecorations(update.view);
         }
       }
@@ -116,11 +138,9 @@ export function wikiLinkCompletionSource(
     const afterOpen = textBefore.slice(openIdx + 2);
     if (afterOpen.includes("]]")) return null;
 
+    // Empty query (a bare [[) is meaningful: the source offers recents.
     const query = afterOpen;
     const from = line.from + openIdx;
-
-    // Don't trigger until user has typed at least 1 char after [[
-    if (query.length < 1) return null;
 
     try {
       const results = await onSearch(query);
