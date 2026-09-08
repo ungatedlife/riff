@@ -5,6 +5,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import ThemeProvider from "./themes/ThemeProvider";
 import { Toaster } from "sonner";
 import "./styles/globals.css";
+import "./styles/desk.css";
 
 // In production, block the context menu and devtools shortcuts.
 //

@@ -35,4 +35,10 @@ describe("notePresentation", () => {
 
     expect(normalizeNoteSnippet(snippet)).toBe("Hello Google and img");
   });
+
+  it("drops heading markers from snippets", () => {
+    expect(normalizeNoteSnippet("# On being a conversationalist\n\nA riff about listening.")).toBe(
+      "On being a conversationalist A riff about listening."
+    );
+  });
 });

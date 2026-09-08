@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use super::settings;
 
@@ -121,7 +121,7 @@ fn rank(links: Vec<VaultLink>, query: &str) -> Vec<VaultLink> {
             .into_iter()
             .filter(|l| seen.insert(l.name.to_lowercase()))
             .collect();
-        recents.sort_by(|a, b| b.modified.cmp(&a.modified));
+        recents.sort_by_key(|note| std::cmp::Reverse(note.modified));
         recents.truncate(MAX_RECENTS);
         return recents;
     }
@@ -150,6 +150,65 @@ fn rank(links: Vec<VaultLink>, query: &str) -> Vec<VaultLink> {
     prefix
 }
 
+/// Percent-encode for a URL query value; `/` survives so a nested note path
+/// reads as a path.
+fn percent_encode(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                out.push(byte as char)
+            }
+            _ => out.push_str(&format!("%{:02X}", byte)),
+        }
+    }
+    out
+}
+
+/// Obsidian's own URI for a note: `obsidian://open?vault=<name>&file=<path>`,
+/// where the vault name is the folder that holds `.obsidian` and the path is
+/// relative to it, without the extension.
+fn obsidian_url(vault_root: &Path, note_path: &Path) -> Option<String> {
+    let vault_name = vault_root.file_name()?.to_str()?;
+    let rel = note_path.strip_prefix(vault_root).ok()?.to_str()?;
+    let file = rel.strip_suffix(".md").unwrap_or(rel);
+    Some(format!(
+        "obsidian://open?vault={}&file={}",
+        percent_encode(vault_name),
+        percent_encode(file)
+    ))
+}
+
+/// ⌘-click on a `[[vault note]]` in the room: hand it to Obsidian.
+#[tauri::command]
+pub fn open_vault_note(name: String) -> Result<bool, String> {
+    let settings = settings::load_settings_from_file()?;
+    let vault_dir = settings
+        .vault_dir
+        .filter(|v| !v.trim().is_empty())
+        .ok_or("No vault folder configured")?;
+    let publish_dir = Path::new(&vault_dir);
+    if !publish_dir.is_dir() {
+        return Err(format!("Vault folder does not exist: {}", vault_dir));
+    }
+
+    let root = find_vault_root(publish_dir);
+    let wanted = name.trim().to_lowercase();
+    let links = scan_vault(&root.to_string_lossy());
+    let link = links
+        .iter()
+        .find(|l| l.name.to_lowercase() == wanted)
+        .ok_or_else(|| format!("No note called “{}” in the vault", name.trim()))?;
+    let url =
+        obsidian_url(&root, Path::new(&link.path)).ok_or("Could not build the Obsidian link")?;
+    // `open` hands the obsidian:// URL to whatever app claims the scheme.
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map_err(|e| format!("Could not open Obsidian: {}", e))?;
+    Ok(true)
+}
+
 #[tauri::command]
 pub fn search_vault_links(query: String) -> Result<Vec<VaultLink>, String> {
     let settings = settings::load_settings_from_file()?;
@@ -167,7 +226,29 @@ pub fn search_vault_links(query: String) -> Result<Vec<VaultLink>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{collect_md_notes, find_vault_root, rank, VaultLink};
+    use super::{collect_md_notes, find_vault_root, obsidian_url, percent_encode, rank, VaultLink};
+    use std::path::Path;
+
+    #[test]
+    fn obsidian_urls_name_the_vault_and_the_relative_note_path() {
+        let root = Path::new("/Users/rob/Local Shit/The Conversation");
+        let note =
+            Path::new("/Users/rob/Local Shit/The Conversation/Riffs/Stutz, my new teacher.md");
+        assert_eq!(
+            obsidian_url(root, note).as_deref(),
+            Some(
+                "obsidian://open?vault=The%20Conversation&file=Riffs/Stutz%2C%20my%20new%20teacher"
+            )
+        );
+        // A note outside the vault has no URL.
+        assert!(obsidian_url(root, Path::new("/elsewhere/Note.md")).is_none());
+    }
+
+    #[test]
+    fn percent_encoding_keeps_slashes_and_unreserved_characters() {
+        assert_eq!(percent_encode("a-b_c.d~e/f"), "a-b_c.d~e/f");
+        assert_eq!(percent_encode("Kara Smith & co"), "Kara%20Smith%20%26%20co");
+    }
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 

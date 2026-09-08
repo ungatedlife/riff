@@ -211,14 +211,17 @@ pub fn register_shortcuts_from_settings(app: &AppHandle, settings: &RiffSettings
         .unwrap_or_else(|e| e.into_inner());
     action_map.clear();
 
-    let local_only = settings::local_only_actions();
     for (action, shortcut_str) in &settings.system_shortcuts {
+        // Only the capture surfaces are OS-level hotkeys; the rest are
+        // handled by the windows themselves while Riff is active.
+        if !settings::is_global_action(action) {
+            continue;
+        }
         if let Some(shortcut) = parse_shortcut_string(shortcut_str) {
             let key = shortcut_to_string(&shortcut);
             action_map.insert(key, action.clone());
-            // Skip global registration for in-app-only shortcuts (e.g. zen mode)
-            if !local_only.contains(&action.as_str()) {
-                let _ = app.global_shortcut().register(shortcut);
+            if let Err(e) = app.global_shortcut().register(shortcut) {
+                eprintln!("could not register {} for {}: {}", shortcut_str, action, e);
             }
         }
     }

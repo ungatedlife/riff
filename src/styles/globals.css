@@ -211,6 +211,76 @@ body,
   padding-bottom: 33vh; /* room to breathe past the last line */
 }
 
+/* ── The empty room's hint and the quiet word meter ── */
+.room-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 0 24px;
+  font-size: 12px;
+  color: rgb(var(--color-stone));
+  opacity: 0;
+  transition: opacity 0.7s ease 0.5s;
+  pointer-events: none;
+  user-select: none;
+}
+.room-hint-visible {
+  opacity: 0.75;
+}
+.room-hint kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-right: 2px;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgb(var(--color-ink));
+  background: rgb(var(--color-surface));
+  border: 1px solid rgb(var(--color-line));
+  border-bottom-width: 2px;
+  border-radius: 5px;
+}
+[data-theme="dark"] .room-hint kbd {
+  background: rgb(var(--color-surface));
+}
+
+.room-meter {
+  position: absolute;
+  bottom: 24px;
+  /* Flush with the column's right edge: the column is min(44rem, 90%) wide, centered. */
+  right: max(5%, calc((100% - 44rem) / 2));
+  font-size: 12px;
+  color: rgb(var(--color-stone));
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+.room-meter-visible {
+  opacity: 0.55;
+}
+.room-meter-saved {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.room-meter-saved-visible {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .room-hint,
+  .room-meter,
+  .room-meter-saved {
+    transition: none;
+  }
+}
+
 /* ── Forged caret (fullscreen room; modeled on the vault's Cursor-Smith) ── */
 :root {
   --forged-caret-color: #650f70;

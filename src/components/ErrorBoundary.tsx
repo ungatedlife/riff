@@ -1,12 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { t } from "@/i18n";
 
-/// App-level error boundary.
-///
-/// Without this a render error unmounts the tree and leaves an empty window,
-/// which on a frameless always-on-top post-it looks identical to the app
-/// having vanished. Notes are already on disk by the time anything renders, so
-/// recovery is just a reload.
+// Recovery remounts the room from its local recovery record.
 interface Props {
   children: ReactNode;
 }

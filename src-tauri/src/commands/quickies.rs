@@ -97,3 +97,22 @@ mod tests {
         assert!(out.ends_with("second\n"));
     }
 }
+
+
+fn quickie_draft_path() -> Result<PathBuf, String> {
+    Ok(settings::get_settings_path()?.with_file_name("quickie-draft.md"))
+}
+
+#[tauri::command]
+pub fn save_quickie_draft(content: String) -> Result<notes::NoteSaved, String> {
+    let path = quickie_draft_path()?;
+    storage::write_file(&path.to_string_lossy(), &content)?;
+    Ok(notes::NoteSaved { path: path.to_string_lossy().to_string(), filename: "quickie-draft.md".to_string() })
+}
+
+#[tauri::command]
+pub fn get_quickie_draft() -> Result<String, String> {
+    let path = quickie_draft_path()?;
+    if !path.exists() { return Ok(String::new()); }
+    storage::read_file(&path.to_string_lossy())
+}

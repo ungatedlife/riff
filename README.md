@@ -1,96 +1,51 @@
-<p align="center">
-  <img src="app-icon.svg" width="96" height="96" alt="Riff icon">
-</p>
+<p align="center"><img src="app-icon.svg" width="96" height="96" alt="Riff"></p>
+<h1 align="center">riff</h1>
+<p align="center">A little room for what’s alive.</p>
 
-<h1 align="center">Riff</h1>
+Riff is Rob’s macOS writing room for catching a thought and following it somewhere. Quickie captures a fragment. Riff gives it room to unfold. Finished writing lands in an Obsidian vault as ordinary Markdown.
 
-<p align="center">
-  <strong>A quiet room for writing one small, complete thing at a time.</strong>
-</p>
+The visual language comes from Bricks. Woven paper, warm light and dark palettes, indigo and amber ink, restrained glass surfaces, iA Writer Duo body text, and bookish serif headings.
 
-Riff is a macOS menu-bar writing app for one job: noticing when something
-feels alive, sitting with it for two or ten minutes, and shipping it —
-imperfect, complete, out the door. Not quick capture. Not a second brain.
-A writing room with one exit: **Publish**.
+## Two ways in
 
-## Two modes
+**Quickie** opens a compact window with Hyper+Q. Write a fragment and use ⌘↵ to append it to your running Quickies.md note. “There’s more here” saves that fragment as a riff and brings it into the writing room. Escape saves the unfinished quickie and tucks it away.
 
-**Riff** — deep capture. `Hyper+R` (⌘⌃⌥⇧R, made for a Caps Lock hyper key)
-summons the writing room: an Obsidian-style live markdown editor with
-rendered headings, hidden syntax markers, task lists, tables, inline
-images, `==highlights==`, and `[[wiki-links]]` between drafts. `⌘.` for
-zen mode. When it's complete-enough, `⌘↩` publishes: title and date
-stamped, images included, straight into your Obsidian vault, room cleared.
+**Riff** opens the writing room with Hyper+R. The live Markdown editor supports headings, emphasis, lists, tasks, tables, images, links, wiki links, undo, native spellcheck, and find. Use the Aa button for formatting tools. Focus view with ⌘. leaves more space around the words.
 
-**Quickie** — quick capture. `Hyper+Q` pops a small always-on-top post-it
-for a fleeting thought. `esc` (or `⌘↩`) appends it, timestamped, to one
-running note in your vault (`Quickies.md` by default) and the window is
-gone. In, out, back to whatever you were doing.
+The Drafts shelf holds unfinished riffs. ⌘K opens it. ⌘N starts a new riff after saving the current one. Escape saves and hides the room. Shortcuts can be changed in Settings.
 
-Drafts are plain markdown in `~/Documents/Riff` until they're published.
-`esc` saves and hides the room; an emptied draft deletes itself. `⌘⇧P`
-lists your drafts, `⌘⇧L` reopens the last one, `⌘⇧,` opens settings.
-All shortcuts are rebindable.
+## Your words
 
-## Why
+Edits enter a local recovery record immediately and save to disk after a 500 ms pause. Switching drafts, starting fresh, and sending wait for the current write to finish. Failed writes leave the current document open with an error and retry action. Changing text direction reconfigures the editor without replacing the document or its undo history.
 
-Perfectionism kills more writing than laziness does. Ideas arrive small and
-alive, then get buried under over-explaining until they're impossible to
-finish. A riff refuses that: it's the smallest complete expression of a
-thought, published to move the conversation forward. Maybe wrong, maybe a
-dead end — but out there, which is the whole point.
+Drafts live in `~/Documents/Riff` unless a previous configuration specifies another folder. Quickie has a separate scratch file in `~/.riff/quickie-draft.md`. This keeps the same thought from being edited in two windows. Clearing a draft preserves the empty document. Source images are retained because multiple drafts can refer to the same asset.
 
-## Publishing details
+Choose a folder inside your Obsidian vault in Settings, under Files. “Send to vault” creates a Markdown file with a title, slug, and date. A leading H1 becomes its title. Names and image collisions preserve existing vault files. Missing images stop the send and keep the draft. File writes stage and flush a complete file before replacing the destination.
 
-Publish derives the title from a leading `# Heading` (removed from the body
-so your CMS doesn't render it twice) or from the first line. The file lands
-in the vault as `<slug>.md` with YAML frontmatter:
+The completion screen offers another thought, a copy for sharing, and a way to open the note in Obsidian. Sending writes to the vault. Any website publishing behavior belongs to the separate vault publishing workflow.
 
-```markdown
----
-title: "On riffs"
-date: 2026-08-16T17:20:11+01:00
----
-```
+## Development
 
-Referenced images are copied into `<vault>/assets/` and their links
-rewritten (Obsidian ignores dot-directories). Slug collisions get `-2`,
-`-3`, … suffixes. Pick the vault folder in **Settings → Publishing**.
+Requires Node and Rust with the macOS toolchain.
 
-## Build
-
-Requires [Rust](https://rustup.rs) and Node 18+.
-
-```bash
+```sh
 npm install
-npm run tauri dev     # development with hot reload
-npm run tauri build   # production .app bundle
+npm run dev
+npm run tauri dev
 ```
 
-On first launch macOS asks for access to your Documents folder (drafts live
-there). The app icon is a placeholder — drop a 1024×1024 PNG on
-`npx tauri icon` to regenerate the set.
+The browser preview stores its own drafts locally in the browser. It does not access the Mac’s files or Obsidian vault. Native file dialogs, OS shortcuts, images from disk, and Obsidian opening run in the Mac app.
 
-## Releasing
-
-```bash
-npm run release          # patch bump; also release:minor / release:major
+```sh
+npm test
+npm run build
+cd src-tauri
+cargo test
+cargo clippy --all-targets -- -D warnings
 ```
 
-That bumps the version, commits, tags, and pushes. CI builds a universal
-binary, signs the update with Riff's minisign key, and publishes a GitHub
-release with `latest.json`. Every installed copy checks that feed on
-launch, downloads silently, and applies the new version next time it
-starts. The private key lives at `~/.tauri/riff-updater.key` (also the
-`TAURI_SIGNING_PRIVATE_KEY` repo secret) — losing it means shipped apps
-can't verify future updates, so back it up.
+`npm run tauri build` creates the macOS app bundle. A debug build can isolate settings, drafts, and quickie recovery by setting `RIFF_TEST_HOME` to an absolute temporary folder at build time. Release builds ignore this override.
 
-## Credit
+## Provenance
 
-Riff is a fork of [Stik](https://github.com/0xMassi/stik_app) by Massi
-(MIT). The live-preview markdown editor and the writing feel are his craft;
-Riff strips the capture toolkit around it and adds the publish ritual.
-
-## License
-
-[MIT](LICENSE)
+Riff began as a fork of [Stik](https://github.com/0xMassi/stik_app) by Massi. The rebuilt app retains and extends the live Markdown editor. iA Writer Duo is bundled under the SIL Open Font License. See [LICENSE](LICENSE) and the font notice in `public/fonts`.

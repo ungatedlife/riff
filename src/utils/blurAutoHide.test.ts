@@ -31,4 +31,36 @@ describe("shouldHideCaptureOnBlur", () => {
       })
     ).toBe(false);
   });
+
+  it("stays put under Riff's own Settings and Drafts windows", () => {
+    for (const label of ["settings", "command-palette", "main"]) {
+      expect(
+        shouldHideCaptureOnBlur({
+          content: "",
+          nowMs: 2000,
+          ignoreUntilMs: 1000,
+          focusedRiffWindow: label,
+        })
+      ).toBe(false);
+    }
+  });
+
+  it("still hides an empty room when the quickie or another app takes over", () => {
+    expect(
+      shouldHideCaptureOnBlur({
+        content: "",
+        nowMs: 2000,
+        ignoreUntilMs: 1000,
+        focusedRiffWindow: "quickie",
+      })
+    ).toBe(true);
+    expect(
+      shouldHideCaptureOnBlur({
+        content: "",
+        nowMs: 2000,
+        ignoreUntilMs: 1000,
+        focusedRiffWindow: null,
+      })
+    ).toBe(true);
+  });
 });

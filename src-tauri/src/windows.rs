@@ -1,10 +1,12 @@
+use crate::commands::storage::notes_root;
 use crate::state::{AppState, LastSavedNote};
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use std::path::Path;
+use tauri::{AppHandle, Emitter, Manager};
 
-const SETTINGS_WINDOW_WIDTH: f64 = 860.0;
-const SETTINGS_WINDOW_HEIGHT: f64 = 720.0;
-const SETTINGS_WINDOW_MIN_WIDTH: f64 = 760.0;
-const SETTINGS_WINDOW_MIN_HEIGHT: f64 = 560.0;
+pub const MAIN: &str = "main";
+pub const QUICKIE: &str = "quickie";
+pub const SETTINGS: &str = "settings";
+pub const PALETTE: &str = "command-palette";
 
 fn remember_last_note(state: &AppState, path: &str) {
     if path.trim().is_empty() {
@@ -50,142 +52,106 @@ fn set_immersive_presentation(app: &AppHandle, immersive: bool) {
     }
 }
 
+fn set_main_fullscreen_flag(app: &AppHandle, value: bool) {
+    let state = app.state::<AppState>();
+    let mut flag = state
+        .main_fullscreen
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    *flag = value;
+}
+
+fn main_is_fullscreen(app: &AppHandle) -> bool {
+    let state = app.state::<AppState>();
+    let flag = state
+        .main_fullscreen
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    *flag
+}
+
+fn main_is_visible(app: &AppHandle) -> bool {
+    app.get_webview_window(MAIN)
+        .map(|w| w.is_visible().unwrap_or(false))
+        .unwrap_or(false)
+}
+
 /// Present the writing room: fullscreen on the monitor the cursor is on —
 /// summoning should meet the writer where they are, not where the window
 /// last lived. Simple fullscreen (no new macOS space) keeps both the summon
-/// and the return instant.
-fn present_main(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+/// and the return instant. Every path that brings the room back goes
+/// through here, so it can never reappear as a plain window.
+pub fn present_main(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(MAIN) else {
+        return;
+    };
+    if !main_is_fullscreen(app) {
         if let Ok(cursor) = app.cursor_position() {
             if let Ok(Some(monitor)) = app.monitor_from_point(cursor.x, cursor.y) {
                 let _ = window.set_position(tauri::Position::Physical(*monitor.position()));
             }
         }
         let _ = window.set_simple_fullscreen(true);
-        set_immersive_presentation(app, true);
-        let _ = window.show();
-        let _ = window.set_focus();
+        set_main_fullscreen_flag(app, true);
     }
+    set_immersive_presentation(app, true);
+    let _ = window.show();
+    let _ = window.set_focus();
 }
 
 /// Drop out of simple fullscreen after the room hides, so the frame restore
 /// happens invisibly and the next summon starts from a clean state.
 pub fn release_main_fullscreen(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_webview_window(MAIN) {
         let _ = window.set_simple_fullscreen(false);
     }
+    set_main_fullscreen_flag(app, false);
     set_immersive_presentation(app, false);
 }
 
 pub fn show_main(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_webview_window(MAIN) {
         present_main(app);
         let _ = window.emit("shortcut-triggered", ());
     }
 }
 
-fn store_main_visibility(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    let mut visible = state
-        .main_was_visible
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    *visible = app
-        .get_webview_window("main")
-        .map(|w| w.is_visible().unwrap_or(false))
-        .unwrap_or(false);
-}
-
-/// After the palette or settings window closes, bring the writing room back
-/// if it was visible before — without this the room strands behind other apps.
-fn refocus_main_if_it_was_visible(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    let visible = *state
-        .main_was_visible
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-
-    if visible {
-        if let Some(main) = app.get_webview_window("main") {
-            let _ = main.show();
-            let _ = main.set_focus();
-        }
-    }
-}
-
-pub fn show_command_palette(app: &AppHandle) {
-    store_main_visibility(app);
-
-    if let Some(window) = app.get_webview_window("command-palette") {
-        let _ = window.show();
-        let _ = window.set_focus();
+/// After one of Riff's satellite windows hides, hand focus back to the room
+/// if it's up. Otherwise macOS activates whatever app is next in line and the
+/// fullscreen room sits there without a caret.
+pub fn refocus_main(app: &AppHandle) {
+    if !main_is_visible(app) {
         return;
     }
+    if let Some(main) = app.get_webview_window(MAIN) {
+        let _ = main.set_focus();
+    }
+}
 
-    let window = WebviewWindowBuilder::new(
-        app,
-        "command-palette",
-        WebviewUrl::App("index.html?window=command-palette".into()),
-    )
-    .title("Command Palette")
-    .inner_size(700.0, 480.0)
-    .resizable(false)
-    .decorations(false)
-    .transparent(true)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .center()
-    .build();
-
-    if let Ok(win) = window {
-        let app_handle = app.clone();
-        win.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                refocus_main_if_it_was_visible(&app_handle);
-            }
-        });
+/// The drafts list and Settings are created hidden at launch and only ever
+/// shown or hidden, so they appear instantly instead of booting a webview.
+pub fn show_command_palette(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(PALETTE) {
+        let _ = window.center();
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.emit("palette-summoned", ());
     }
 }
 
 pub fn show_settings(app: &AppHandle) {
-    store_main_visibility(app);
-
-    if let Some(window) = app.get_webview_window("settings") {
+    if let Some(window) = app.get_webview_window(SETTINGS) {
+        let _ = window.center();
         let _ = window.show();
         let _ = window.set_focus();
-        return;
-    }
-
-    let window = WebviewWindowBuilder::new(
-        app,
-        "settings",
-        WebviewUrl::App("index.html?window=settings".into()),
-    )
-    .title("Settings")
-    .inner_size(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
-    .min_inner_size(SETTINGS_WINDOW_MIN_WIDTH, SETTINGS_WINDOW_MIN_HEIGHT)
-    .resizable(true)
-    .decorations(false)
-    .transparent(true)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .center()
-    .build();
-
-    if let Ok(win) = window {
-        let app_handle = app.clone();
-        win.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                refocus_main_if_it_was_visible(&app_handle);
-            }
-        });
+        let _ = window.emit("settings-summoned", ());
     }
 }
 
 /// Summon the quickie post-it: a small always-on-top window for a fleeting
 /// thought. Centered every time — it's a scratchpad, not a room.
 pub fn show_quickie(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("quickie") {
+    if let Some(window) = app.get_webview_window(QUICKIE) {
         let _ = window.center();
         let _ = window.show();
         let _ = window.set_focus();
@@ -193,26 +159,82 @@ pub fn show_quickie(app: &AppHandle) {
     }
 }
 
-#[tauri::command]
-pub fn hide_window(window: tauri::Window, app: AppHandle) {
-    let _ = window.hide();
-    if window.label() == "main" {
-        release_main_fullscreen(&app);
+/// Hide any Riff window. The room also leaves fullscreen; every other
+/// window hands focus back to the room if it's still up.
+pub fn hide_by_label(app: &AppHandle, label: &str) {
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.hide();
+    }
+    if label == MAIN {
+        release_main_fullscreen(app);
+    } else {
+        refocus_main(app);
+    }
+}
+
+/// Windows are hidden, never destroyed: ⌘W from the (invisible) default menu
+/// or any other close request just tucks the window away. Destroying the
+/// room would leave the app running with nothing to summon.
+pub fn install_close_guards(app: &AppHandle) {
+    for (label, window) in app.webview_windows() {
+        let handle = app.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                hide_by_label(&handle, &label);
+            }
+        });
+    }
+}
+
+fn ensure_draft_path(path: &str) -> Result<(), String> {
+    let root = notes_root()?;
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.clone());
+    let note = Path::new(path);
+    let canonical_note = note.canonicalize().unwrap_or_else(|_| note.to_path_buf());
+    if canonical_note.starts_with(&canonical_root) {
+        Ok(())
+    } else {
+        Err("Only drafts inside the drafts folder can be opened".to_string())
     }
 }
 
 #[tauri::command]
+pub fn hide_window(window: tauri::Window, app: AppHandle) {
+    hide_by_label(&app, window.label());
+}
+
+#[tauri::command]
 pub fn hide_main(app: AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-    }
-    release_main_fullscreen(&app);
+    hide_by_label(&app, MAIN);
+}
+
+/// Label of the Riff window that has focus right now, if any. The room's
+/// blur handler uses it to tell "the writer left for another app" from
+/// "the writer opened Settings".
+#[tauri::command]
+pub fn focused_riff_window(app: AppHandle) -> Option<String> {
+    app.webview_windows()
+        .into_iter()
+        .find(|(_, w)| w.is_focused().unwrap_or(false))
+        .map(|(label, _)| label)
+}
+
+/// The room calls this once its draft is on disk during an exit.
+#[tauri::command]
+pub fn flush_complete(app: AppHandle) {
+    let state = app.state::<AppState>();
+    let (lock, cvar) = &*state.flush_signal;
+    let mut done = lock.lock().unwrap_or_else(|e| e.into_inner());
+    *done = true;
+    cvar.notify_all();
 }
 
 /// Load a draft into the writing room: shows + focuses the main window and
 /// emits `open-draft` with the file's path and content.
 #[tauri::command]
 pub fn open_draft(app: AppHandle, path: String) -> Result<(), String> {
+    ensure_draft_path(&path)?;
     let content =
         std::fs::read_to_string(&path).map_err(|e| format!("Failed to read note: {}", e))?;
 
@@ -221,7 +243,7 @@ pub fn open_draft(app: AppHandle, path: String) -> Result<(), String> {
         remember_last_note(&state, &path);
     }
 
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_webview_window(MAIN) {
         present_main(&app);
         let _ = window.emit(
             "open-draft",
@@ -240,15 +262,8 @@ pub fn open_command_palette(app: AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn open_search(app: AppHandle) -> Result<bool, String> {
-    show_command_palette(&app);
-    Ok(true)
-}
-
-#[tauri::command]
-pub fn open_manager(app: AppHandle) -> Result<bool, String> {
-    show_command_palette(&app);
-    Ok(true)
+pub fn open_quickie(app: AppHandle) {
+    show_quickie(&app);
 }
 
 #[tauri::command]
@@ -267,7 +282,7 @@ pub fn reopen_last_note(app: AppHandle) -> Result<(), String> {
             .unwrap_or_else(|e| e.into_inner());
         match last.as_ref() {
             Some(note) => note.path.clone(),
-            None => return Err("No note saved yet".to_string()),
+            None => return Err("No recent draft".to_string()),
         }
     };
 
@@ -276,7 +291,7 @@ pub fn reopen_last_note(app: AppHandle) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{remember_last_note, SETTINGS_WINDOW_MIN_WIDTH, SETTINGS_WINDOW_WIDTH};
+    use super::remember_last_note;
     use crate::state::AppState;
 
     #[test]
@@ -293,8 +308,8 @@ mod tests {
     }
 
     #[test]
-    fn settings_window_min_width_is_large_enough_for_full_menu_bar() {
-        assert!(SETTINGS_WINDOW_MIN_WIDTH >= 760.0);
-        assert!(SETTINGS_WINDOW_WIDTH > SETTINGS_WINDOW_MIN_WIDTH);
+    fn fullscreen_flag_starts_false() {
+        let state = AppState::new();
+        assert!(!*state.main_fullscreen.lock().unwrap());
     }
 }

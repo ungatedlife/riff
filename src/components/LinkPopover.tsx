@@ -13,8 +13,10 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { consumeEscapeForPopover } from "@/utils/popoverEscape";
 
 interface LinkPopoverProps {
-  editorRef: { current: EditorView | null };
   getView: () => EditorView | null;
+  /// Called with a listener that fires whenever the editor's selection,
+  /// document or focus changes; returns the unsubscribe.
+  subscribe: (listener: () => void) => () => void;
 }
 
 interface LinkInfo {
@@ -79,7 +81,7 @@ function getActiveLinkInfo(view: EditorView): LinkInfo | null {
   return null;
 }
 
-export default function LinkPopover({ getView }: LinkPopoverProps) {
+export default function LinkPopover({ getView, subscribe }: LinkPopoverProps) {
   const { t } = useTranslation();
   const [linkInfo, setLinkInfo] = useState<LinkInfo | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -120,28 +122,9 @@ export default function LinkPopover({ getView }: LinkPopoverProps) {
     if (!info) setIsEditing(false);
   }, [getView]);
 
-  // Poll for cursor changes (CodeMirror doesn't have TipTap's event system built-in here)
-  useEffect(() => {
-    const view = getView();
-    if (!view) return;
-
-    // Listen for selection changes via a timer (CM updateListener is in Editor.tsx)
-    const interval = setInterval(updateLinkInfo, 200);
-    return () => clearInterval(interval);
-  }, [getView, updateLinkInfo]);
-
-  // Also update on key/mouse events
-  useEffect(() => {
-    const handleKeyUp = () => updateLinkInfo();
-    const handleClick = () => setTimeout(updateLinkInfo, 50);
-
-    window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("click", handleClick);
-    return () => {
-      window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("click", handleClick);
-    };
-  }, [updateLinkInfo]);
+  // The editor reports selection, document and focus changes; nothing to
+  // poll for.
+  useEffect(() => subscribe(updateLinkInfo), [subscribe, updateLinkInfo]);
 
   useEffect(() => {
     if (!isEditing) return;

@@ -1,8 +1,10 @@
 use super::versioning;
+use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CustomFontEntry {
@@ -69,10 +71,9 @@ pub struct RiffSettings {
     pub system_shortcuts: HashMap<String, String>,
     #[serde(default = "default_font_size")]
     pub font_size: u32,
-    #[serde(default)]
-    pub window_size: Option<(f64, f64)>,
-    #[serde(default)]
-    pub window_position: Option<(f64, f64)>,
+    /// Start Riff at login so the hotkeys always have something to summon.
+    #[serde(default = "default_true")]
+    pub launch_at_login: bool,
     #[serde(default = "default_text_direction")]
     pub text_direction: String,
     #[serde(default)]
@@ -99,8 +100,7 @@ impl Default for RiffSettings {
             hide_dock_icon: true,
             system_shortcuts: default_system_shortcuts(),
             font_size: 21,
-            window_size: None,
-            window_position: None,
+            launch_at_login: true,
             text_direction: "auto".to_string(),
             hide_tray_icon: false,
             active_theme: String::new(),
@@ -118,18 +118,24 @@ pub fn default_system_shortcuts() -> HashMap<String, String> {
         ("summon".to_string(), "Cmd+Ctrl+Alt+Shift+R".to_string()),
         ("quickie".to_string(), "Cmd+Ctrl+Alt+Shift+Q".to_string()),
         ("search".to_string(), "Cmd+Shift+P".to_string()),
-        ("settings".to_string(), "Cmd+Shift+Comma".to_string()),
         ("last_note".to_string(), "Cmd+Shift+L".to_string()),
         ("zen_mode".to_string(), "Cmd+Period".to_string()),
     ])
 }
 
-/// Actions that are in-app only (not registered as OS-level global shortcuts).
-pub fn local_only_actions() -> &'static [&'static str] {
-    &["zen_mode"]
+/// The only actions registered as OS-level hotkeys: the two capture
+/// surfaces. Everything else works only while Riff is active, so Riff never
+/// swallows another app's ⌘⇧P.
+pub const GLOBAL_ACTIONS: &[&str] = &["summon", "quickie"];
+
+pub fn is_global_action(action: &str) -> bool {
+    GLOBAL_ACTIONS.contains(&action)
 }
 
 fn normalize_system_shortcuts(shortcuts: &mut HashMap<String, String>) {
+    // Settings is ⌘, inside the app and never a hotkey; older files still
+    // carry the entry.
+    shortcuts.remove("settings");
     let defaults = default_system_shortcuts();
     for (action, default_shortcut) in &defaults {
         shortcuts
@@ -164,6 +170,12 @@ fn is_valid_active_theme(active_theme: &str, custom_themes: &[CustomThemeDefinit
 fn normalize_loaded_settings(mut settings: RiffSettings) -> RiffSettings {
     normalize_system_shortcuts(&mut settings.system_shortcuts);
 
+    // Hiding both icons would leave the hotkeys as the only way in; if one
+    // of those ever fails to register, Riff is running and unreachable.
+    if settings.hide_dock_icon && settings.hide_tray_icon {
+        settings.hide_tray_icon = false;
+    }
+
     if settings.active_theme.is_empty() && is_legacy_theme_mode(&settings.theme_mode) {
         settings.active_theme = settings.theme_mode.clone();
     }
@@ -179,7 +191,14 @@ fn normalize_loaded_settings(mut settings: RiffSettings) -> RiffSettings {
     settings
 }
 
-fn get_settings_path() -> Result<PathBuf, String> {
+pub(crate) fn get_settings_path() -> Result<PathBuf, String> {
+    #[cfg(debug_assertions)]
+    if let Some(root) = std::env::var("RIFF_TEST_HOME").ok().or_else(|| option_env!("RIFF_TEST_HOME").map(String::from)) {
+        let config = PathBuf::from(root);
+        if !config.is_absolute() { return Err("RIFF_TEST_HOME must be absolute".to_string()); }
+        fs::create_dir_all(&config).map_err(|e| e.to_string())?;
+        return Ok(config.join("settings.json"));
+    }
     let home = dirs::home_dir().ok_or("Could not find home directory")?;
     let riff_config = home.join(".riff");
     fs::create_dir_all(&riff_config).map_err(|e| e.to_string())?;
@@ -210,9 +229,67 @@ pub fn get_settings() -> Result<RiffSettings, String> {
 }
 
 #[tauri::command]
-pub fn save_settings(settings: RiffSettings) -> Result<bool, String> {
+pub fn save_settings(app: AppHandle, settings: RiffSettings) -> Result<bool, String> {
+    let settings = normalize_loaded_settings(settings);
     save_settings_to_file(&settings)?;
+    apply_launch_at_login(&app, settings.launch_at_login);
+    set_launch_item_checked(&app, settings.launch_at_login);
     Ok(true)
+}
+
+/// A LaunchAgent points at a fixed executable. Only the installed app should
+/// ever register one — a `cargo tauri dev`/`build` binary lives under
+/// `target/` and would break at the next rebuild.
+fn runs_from_installed_bundle() -> bool {
+    std::env::current_exe()
+        .map(|exe| !exe.components().any(|c| c.as_os_str() == "target"))
+        .unwrap_or(false)
+}
+
+pub fn apply_launch_at_login(app: &AppHandle, enable: bool) {
+    use tauri_plugin_autostart::ManagerExt;
+
+    if !runs_from_installed_bundle() {
+        return;
+    }
+    let launcher = app.autolaunch();
+    let result = if enable {
+        launcher.enable()
+    } else {
+        match launcher.is_enabled() {
+            Ok(true) => launcher.disable(),
+            _ => Ok(()),
+        }
+    };
+    if let Err(e) = result {
+        eprintln!("launch at login: {}", e);
+    }
+}
+
+fn set_launch_item_checked(app: &AppHandle, checked: bool) {
+    let state = app.state::<AppState>();
+    let item = state
+        .launch_at_login_item
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if let Some(item) = item.as_ref() {
+        let _ = item.set_checked(checked);
+    }
+}
+
+/// The menu bar's "Launch at Login" tick: flip the setting and apply it.
+pub fn toggle_launch_at_login(app: &AppHandle) {
+    let Ok(mut settings) = load_settings_from_file() else {
+        return;
+    };
+    settings.launch_at_login = !settings.launch_at_login;
+    if let Err(e) = save_settings_to_file(&settings) {
+        eprintln!("launch at login: {}", e);
+        return;
+    }
+    apply_launch_at_login(app, settings.launch_at_login);
+    set_launch_item_checked(app, settings.launch_at_login);
+    let _ = tauri::Emitter::emit(app, "settings-changed", settings);
 }
 
 #[cfg(target_os = "macos")]
@@ -232,15 +309,12 @@ pub fn apply_dock_icon_visibility(hide: bool) {
 }
 
 #[tauri::command]
-pub fn save_window_geometry(width: f64, height: f64, x: f64, y: f64) -> Result<(), String> {
-    let mut settings = load_settings_from_file()?;
-    settings.window_size = Some((width, height));
-    settings.window_position = Some((x, y));
-    save_settings_to_file(&settings)
-}
-
-#[tauri::command]
 pub fn set_tray_icon_visibility(app: tauri::AppHandle, hide: bool) {
+    // Never hide the last remaining way in (see normalize_loaded_settings).
+    let dock_hidden = load_settings_from_file()
+        .map(|s| s.hide_dock_icon)
+        .unwrap_or(true);
+    let hide = hide && !dock_hidden;
     if let Some(tray) = app.tray_by_id("main-tray") {
         let _ = tray.set_visible(!hide);
     }
@@ -385,13 +459,56 @@ pub fn export_theme_file(
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_loaded_settings, parse_color_value, RiffSettings};
+    use super::{is_global_action, normalize_loaded_settings, parse_color_value, RiffSettings};
+
+    #[test]
+    fn only_the_capture_surfaces_are_global_hotkeys() {
+        assert!(is_global_action("summon"));
+        assert!(is_global_action("quickie"));
+        assert!(!is_global_action("search"));
+        assert!(!is_global_action("last_note"));
+        assert!(!is_global_action("settings"));
+        assert!(!is_global_action("zen_mode"));
+    }
+
+    #[test]
+    fn stale_settings_hotkey_is_dropped_and_missing_actions_filled() {
+        let mut settings = RiffSettings::default();
+        settings
+            .system_shortcuts
+            .insert("settings".to_string(), "Cmd+Shift+Comma".to_string());
+        settings.system_shortcuts.remove("zen_mode");
+
+        let normalized = normalize_loaded_settings(settings);
+        assert!(!normalized.system_shortcuts.contains_key("settings"));
+        assert_eq!(
+            normalized
+                .system_shortcuts
+                .get("zen_mode")
+                .map(String::as_str),
+            Some("Cmd+Period")
+        );
+    }
+
+    #[test]
+    fn both_icons_can_never_be_hidden_at_once() {
+        let settings = RiffSettings { hide_dock_icon: true, hide_tray_icon: true, ..RiffSettings::default() };
+        let normalized = normalize_loaded_settings(settings);
+        assert!(normalized.hide_dock_icon);
+        assert!(!normalized.hide_tray_icon);
+
+        let settings = RiffSettings { hide_dock_icon: false, hide_tray_icon: true, ..RiffSettings::default() };
+        assert!(normalize_loaded_settings(settings).hide_tray_icon);
+    }
+
+    #[test]
+    fn launch_at_login_defaults_on() {
+        assert!(RiffSettings::default().launch_at_login);
+    }
 
     #[test]
     fn normalization_falls_back_to_legacy_theme_mode_when_active_theme_is_invalid() {
-        let mut settings = RiffSettings::default();
-        settings.theme_mode = "dark".to_string();
-        settings.active_theme = "removed-custom-theme".to_string();
+        let settings = RiffSettings { theme_mode: "dark".to_string(), active_theme: "removed-custom-theme".to_string(), ..RiffSettings::default() };
 
         let normalized = normalize_loaded_settings(settings);
         assert_eq!(normalized.active_theme, "dark");

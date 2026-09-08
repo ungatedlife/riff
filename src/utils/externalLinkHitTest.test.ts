@@ -43,4 +43,11 @@ describe("shouldShowCmdLinkCursor", () => {
       })
     ).toBe(false);
   });
+
+  it("treats wiki-links as followable with cmd held", () => {
+    const line = "leans on [[Stutz, my new teacher]] more";
+    expect(shouldShowCmdLinkCursor({ metaKey: true, lineText: line, offset: 14 })).toBe(true);
+    expect(shouldShowCmdLinkCursor({ metaKey: true, lineText: line, offset: 2 })).toBe(false);
+    expect(shouldShowCmdLinkCursor({ metaKey: false, lineText: line, offset: 14 })).toBe(false);
+  });
 });

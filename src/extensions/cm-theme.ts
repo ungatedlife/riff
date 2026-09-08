@@ -41,10 +41,10 @@ export const riffEditorTheme = EditorView.theme({
     borderLeftWidth: "1px",
   },
   ".cm-selectionBackground": {
-    backgroundColor: "rgba(232, 112, 95, 0.15) !important",
+    backgroundColor: "rgb(var(--color-coral) / 0.15) !important",
   },
   "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
-    backgroundColor: "rgba(232, 112, 95, 0.2) !important",
+    backgroundColor: "rgb(var(--color-coral) / 0.2) !important",
   },
   ".cm-activeLine": {
     backgroundColor: "transparent",
@@ -58,9 +58,10 @@ export const riffEditorTheme = EditorView.theme({
   },
   // Wiki-link decorations: the forged caret's purple, brackets concealed
   // (cm-wiki-link.ts reveals them while the caret is inside the link).
+  // Text cursor: a plain click only places the caret. The pointer appears
+  // with ⌘ held (Editor.tsx), which is what follows the link.
   ".cm-wikilink": {
     color: "var(--forged-caret-color)",
-    cursor: "pointer",
     borderRadius: "2px",
     transition: "background-color 0.15s",
   },
@@ -113,7 +114,7 @@ export const riffEditorTheme = EditorView.theme({
     fontSize: "10px",
     fontWeight: "600",
     color: "rgb(var(--color-coral))",
-    backgroundColor: "rgba(232, 112, 95, 0.1)",
+    backgroundColor: "rgb(var(--color-coral) / 0.1)",
     padding: "1px 6px",
     borderRadius: "99px",
     marginLeft: "8px",
@@ -124,11 +125,11 @@ export const riffEditorTheme = EditorView.theme({
     borderBottom: "1px solid rgb(var(--color-line))",
   },
   ".cm-searchMatch": {
-    backgroundColor: "rgba(232, 112, 95, 0.2)",
+    backgroundColor: "rgb(var(--color-coral) / 0.2)",
     borderRadius: "2px",
   },
   ".cm-searchMatch.cm-searchMatch-selected": {
-    backgroundColor: "rgba(232, 112, 95, 0.35)",
+    backgroundColor: "rgb(var(--color-coral) / 0.35)",
   },
   // Horizontal rule widget
   ".cm-hr-widget": {
@@ -191,7 +192,7 @@ export const riffEditorTheme = EditorView.theme({
     opacity: "1",
   },
   ".cm-table-add-row:hover": {
-    backgroundColor: "rgba(232, 112, 95, 0.1)",
+    backgroundColor: "rgb(var(--color-coral) / 0.1)",
     color: "rgb(var(--color-coral))",
   },
   // Add column button — vertical bar on right edge
@@ -214,7 +215,7 @@ export const riffEditorTheme = EditorView.theme({
     opacity: "1",
   },
   ".cm-table-add-col:hover": {
-    backgroundColor: "rgba(232, 112, 95, 0.1)",
+    backgroundColor: "rgb(var(--color-coral) / 0.1)",
     color: "rgb(var(--color-coral))",
   },
   // Table context menu (right-click)
@@ -241,7 +242,7 @@ export const riffEditorTheme = EditorView.theme({
     lineHeight: "1.4",
   },
   ".cm-table-menu-item:hover": {
-    backgroundColor: "rgba(232, 112, 95, 0.1)",
+    backgroundColor: "rgb(var(--color-coral) / 0.1)",
     color: "rgb(var(--color-coral))",
   },
   ".cm-table-menu-disabled": {
@@ -323,8 +324,8 @@ export const riffHighlightStyle = syntaxHighlighting(
     // Headings — bold, slightly larger
     // Heading scale mirrors the vault's Obsidian setup (Minimal + Style
     // Settings): h1 1.6/600, h2 1.45/500, h3 1.25, h4 1.15.
-    { tag: tags.heading1, fontWeight: "600", fontSize: "1.6em" },
-    { tag: tags.heading2, fontWeight: "500", fontSize: "1.45em" },
+    { tag: tags.heading1, fontFamily: "var(--serif)", fontWeight: "400", fontSize: "2.15em", letterSpacing: "-0.025em" },
+    { tag: tags.heading2, fontFamily: "var(--serif)", fontWeight: "400", fontSize: "1.65em" },
     { tag: tags.heading3, fontWeight: "600", fontSize: "1.25em" },
     { tag: tags.heading4, fontWeight: "600", fontSize: "1.15em" },
     // Markdown syntax markers (#, **, *, ~~, `, [, ], -, 1.)

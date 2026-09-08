@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@/platform";
 import { useTranslation } from "@/hooks/useTranslation";
 
 interface ShortcutRecorderProps {

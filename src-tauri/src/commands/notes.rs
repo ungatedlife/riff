@@ -94,7 +94,7 @@ pub fn save_note_inner(content: String) -> Result<NoteSaved, String> {
     let filename = generate_filename(&content);
     let file_path = root.join(&filename);
 
-    storage::write_file(&file_path.to_string_lossy(), &content)?;
+    storage::atomic_write(&file_path, content.as_bytes(), true)?;
 
     Ok(NoteSaved {
         path: file_path.to_string_lossy().to_string(),
@@ -201,25 +201,19 @@ pub fn get_note_content(path: String) -> Result<String, String> {
 pub fn update_note(
     path: String,
     content: String,
+    preserve_empty: Option<bool>,
     index: State<'_, NoteIndex>,
 ) -> Result<NoteSaved, String> {
+    // Riff only ever writes its own drafts. It no longer claims markdown
+    // files elsewhere, so a stray path here is a bug, never a note to save.
     let root = notes_root()?;
     let note_path = PathBuf::from(&path);
-    let in_root = note_path.starts_with(&root);
-
-    // For drafts opened from Finder, allow saving external markdown files too.
-    if !in_root {
-        let is_markdown = note_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown"))
-            .unwrap_or(false);
-        if !is_markdown {
-            return Err(
-                "Invalid path: only markdown files can be edited outside the drafts folder"
-                    .to_string(),
-            );
-        }
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.clone());
+    let canonical_note = note_path
+        .canonicalize()
+        .unwrap_or_else(|_| note_path.clone());
+    if !canonical_note.starts_with(&canonical_root) {
+        return Err("Only drafts inside the drafts folder can be edited".to_string());
     }
 
     // Check file exists
@@ -227,8 +221,8 @@ pub fn update_note(
         return Err("Note file does not exist".to_string());
     }
 
-    // Inside the drafts folder, empty content deletes the note.
-    if in_root && is_effectively_empty_markdown(&content) {
+    // Empty content deletes the draft.
+    if is_effectively_empty_markdown(&content) && !preserve_empty.unwrap_or(false) {
         storage::delete_file(&path).map_err(|e| format!("Failed to delete note: {}", e))?;
         index.remove(&path);
         return Ok(NoteSaved {
@@ -242,13 +236,8 @@ pub fn update_note(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    // Write updated content
     storage::write_file(&path, &content)?;
-
-    if in_root {
-        // Re-index with updated content
-        index.add(&path);
-    }
+    index.add(&path);
 
     Ok(NoteSaved {
         path: note_path.to_string_lossy().to_string(),
@@ -333,13 +322,9 @@ pub(crate) fn extract_asset_filenames(content: &str) -> Vec<String> {
 }
 
 /// Delete `.assets/` files referenced by a note.
-pub(crate) fn delete_note_assets(content: &str, folder_path: &std::path::Path) {
-    let filenames = extract_asset_filenames(content);
-    let assets_dir = folder_path.join(".assets");
-    for name in filenames {
-        let path = assets_dir.join(&name);
-        let _ = storage::delete_file(&path.to_string_lossy());
-    }
+pub(crate) fn delete_note_assets(_content: &str, _folder_path: &std::path::Path) {
+    // Images may be shared by multiple drafts. Retain them until a dedicated
+    // garbage-collection pass can prove they are unreferenced.
 }
 
 fn is_supported_image_ext(ext: &str) -> bool {

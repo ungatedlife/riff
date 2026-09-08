@@ -39,6 +39,8 @@ export interface RiffSettings {
   hide_dock_icon: boolean;
   system_shortcuts: Record<string, string>;
   font_size: number;
+  /** Start Riff at login so the hotkeys always have something to summon. */
+  launch_at_login: boolean;
   text_direction: string;
   hide_tray_icon: boolean;
   active_theme: string;

@@ -20,13 +20,13 @@ import {
   placeholder as cmPlaceholder,
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewline } from "@codemirror/commands";
+import { searchKeymap } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { syntaxTree } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { autocompletion, closeCompletion, completionStatus } from "@codemirror/autocomplete";
-import { search, searchKeymap } from "@codemirror/search";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@/platform";
+import { invoke } from "@/platform";
 import { open } from "@tauri-apps/plugin-shell";
 import { riffEditorTheme, riffHighlightStyle } from "@/extensions/cm-theme";
 import { forgedCaret } from "@/extensions/cm-forged-caret";
@@ -64,6 +64,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 
 interface EditorProps {
   onChange: (content: string) => void;
+  readOnly?: boolean;
   placeholder?: string;
   initialContent?: string;
   showFormatToolbar?: boolean;
@@ -95,11 +96,14 @@ export interface EditorRef {
 /// string was current at mount. Switching language then left the old text in
 /// place until the window was recreated.
 const placeholderCompartment = new Compartment();
+const directionCompartment = new Compartment();
+const editableCompartment = new Compartment();
 
 const Editor = forwardRef<EditorRef, EditorProps>(
   (
     {
       onChange,
+      readOnly = false,
       placeholder,
       initialContent,
       showFormatToolbar,
@@ -141,10 +145,20 @@ const Editor = forwardRef<EditorRef, EditorProps>(
     onCursorChangeRef.current = onCursorChange;
     const lastDomDropAtRef = useRef(0);
     const formatStateCallbackRef = useRef<((state: FormatState) => void) | null>(null);
+    // Anyone who needs to know the selection moved (the link popover)
+    // subscribes here instead of polling.
+    const selectionListenersRef = useRef(new Set<() => void>());
 
     // Notify toolbar of format state changes
     const setFormatStateCallback = useCallback((cb: (state: FormatState) => void) => {
       formatStateCallbackRef.current = cb;
+    }, []);
+
+    const subscribeSelection = useCallback((listener: () => void) => {
+      selectionListenersRef.current.add(listener);
+      return () => {
+        selectionListenersRef.current.delete(listener);
+      };
     }, []);
 
     // Initialize CodeMirror
@@ -457,9 +471,10 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         activateOnTyping: true,
       });
 
-      // Wiki-link click handler
-      const wikiClickHandler = wikiLinkClickHandler((slug: string, _path: string) => {
-        // Resolve path from slug by searching
+      // ⌘-click on a wiki-link: a draft opens here, a vault note opens in
+      // Obsidian. Plain clicks just place the caret — nobody should be
+      // following links mid-riff.
+      const wikiClickHandler = wikiLinkClickHandler((slug: string) => {
         invoke<SearchResult[]>("search_notes", { query: slug })
           .then((results) => {
             const match = results.find(
@@ -467,9 +482,20 @@ const Editor = forwardRef<EditorRef, EditorProps>(
             );
             if (match) {
               onWikiLinkClickRef.current?.(slug, match.path);
+              return;
             }
+            return invoke("open_vault_note", { name: slug });
           })
-          .catch(() => {});
+          .catch((error) => {
+            console.error("Could not open wiki-link:", error);
+          });
+      });
+
+      // Selection / focus changes fan out to subscribers (link popover).
+      const selectionListener = EditorView.updateListener.of((update) => {
+        if (update.selectionSet || update.docChanged || update.focusChanged) {
+          for (const listener of selectionListenersRef.current) listener();
+        }
       });
 
       // Format state change listener
@@ -522,7 +548,6 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         riffHighlightStyle,
         drawSelection(),
         placeholderCompartment.of(cmPlaceholder(placeholderText)),
-        search(),
         richCopyHandler,
         imageHandlers,
         linkClickHandler,
@@ -538,10 +563,20 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         formatStateListener,
         cursorChangeListener,
         docChangeListener,
-        bidiSupport(textDirection),
+        selectionListener,
+        directionCompartment.of(bidiSupport(textDirection)),
+        editableCompartment.of(EditorView.editable.of(!readOnly)),
         EditorView.lineWrapping,
-        // CSS class for the content element
-        EditorView.contentAttributes.of({ class: "riff-editor" }),
+        // CodeMirror is a code editor and switches spellcheck off; this is a
+        // writing room, so it goes back on. Autocorrect and auto-capitalize
+        // stay off — the writer's words are the writer's words.
+        EditorView.contentAttributes.of({
+          class: "riff-editor",
+          "aria-label": "Your writing",
+          spellcheck: "true",
+          autocorrect: "off",
+          autocapitalize: "off",
+        }),
         ...(useForgedCaret ? [forgedCaret()] : []),
       ];
 
@@ -576,6 +611,13 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         ),
       });
     }, [placeholderText]);
+
+    useEffect(() => {
+      viewRef.current?.dispatch({ effects: directionCompartment.reconfigure(bidiSupport(textDirection)) });
+    }, [textDirection]);
+    useEffect(() => {
+      viewRef.current?.dispatch({ effects: editableCompartment.reconfigure(EditorView.editable.of(!readOnly)) });
+    }, [readOnly]);
 
     // Tauri native drag-drop fallback (WebKit dataTransfer can be empty for OS-level drops)
     useEffect(() => {
@@ -671,7 +713,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(
     return (
       <div className={`h-full relative${toolbarVisible ? " has-formatting-toolbar" : ""}`}>
         <div ref={containerRef} className="h-full" />
-        <LinkPopover editorRef={{ current: viewRef.current }} getView={() => viewRef.current} />
+        <LinkPopover getView={() => viewRef.current} subscribe={subscribeSelection} />
         {toolbarVisible && (
           <FormattingToolbar
             getView={() => viewRef.current}

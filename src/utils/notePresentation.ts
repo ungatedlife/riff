@@ -30,7 +30,11 @@ export function extractNoteTitle(content: string): string {
 }
 
 export function normalizeNoteSnippet(value: string): string {
-  let snippet = value;
+  // Heading markers are structure, not words to show in a preview.
+  let snippet = value
+    .split(/\r?\n/)
+    .map((line) => line.replace(HEADING_PREFIX_RE, ""))
+    .join(" ");
   snippet = snippet.replace(BREAK_PLACEHOLDER_RE, " ");
   snippet = snippet.replace(MARKDOWN_IMAGE_RE, (_match, alt: string, url: string) =>
     (alt || url || "").trim()

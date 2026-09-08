@@ -29,17 +29,40 @@ export function findExternalLinkAtOffset(
   return null;
 }
 
+/**
+ * Returns the [[wiki-link]] name under a line offset, if any.
+ */
+export function findWikiLinkAtOffset(
+  lineText: string,
+  offset: number
+): string | null {
+  const wikiLinkRegex = /\[\[([^\]\n]+)\]\]/g;
+  let match: RegExpExecArray | null;
+  while ((match = wikiLinkRegex.exec(lineText)) !== null) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (offset >= start && offset < end) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
 interface CmdLinkCursorParams {
   metaKey: boolean;
   lineText: string;
   offset: number;
 }
 
+/** ⌘ over anything followable — an external link or a wiki-link. */
 export function shouldShowCmdLinkCursor({
   metaKey,
   lineText,
   offset,
 }: CmdLinkCursorParams): boolean {
   if (!metaKey) return false;
-  return findExternalLinkAtOffset(lineText, offset) !== null;
+  return (
+    findExternalLinkAtOffset(lineText, offset) !== null ||
+    findWikiLinkAtOffset(lineText, offset) !== null
+  );
 }

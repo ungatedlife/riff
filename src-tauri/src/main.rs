@@ -14,25 +14,30 @@ use commands::{
 };
 use shortcuts::shortcut_to_string;
 use state::AppState;
-use tauri::{AppHandle, Emitter, Manager, RunEvent};
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, EventTarget, Manager, RunEvent};
 use tauri_plugin_global_shortcut::ShortcutState;
-use windows::{show_command_palette, show_main, show_quickie, show_settings};
+use windows::{show_main, show_quickie};
 
-fn handle_opened_files(app: &AppHandle, paths: Vec<std::path::PathBuf>) {
-    for path in paths {
-        let is_markdown = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown"))
-            .unwrap_or(false);
-        if !is_markdown {
-            continue;
-        }
+/// How long an exit waits for the room to finish writing its draft. The
+/// save itself takes a few milliseconds; the timeout only matters if the
+/// webview is unresponsive.
+const EXIT_FLUSH_TIMEOUT: Duration = Duration::from_millis(1500);
 
-        let path_str = path.to_string_lossy().to_string();
-        if let Err(err) = windows::open_draft(app.clone(), path_str) {
-            eprintln!("Failed to open markdown file from Finder: {}", err);
+fn wait_for_flush(app: &AppHandle, timeout: Duration) {
+    let state = app.state::<AppState>();
+    let (lock, cvar) = &*state.flush_signal;
+    let mut done = lock.lock().unwrap_or_else(|e| e.into_inner());
+    let deadline = Instant::now() + timeout;
+    while !*done {
+        let now = Instant::now();
+        if now >= deadline {
+            break;
         }
+        let (guard, _) = cvar
+            .wait_timeout(done, deadline - now)
+            .unwrap_or_else(|e| e.into_inner());
+        done = guard;
     }
 }
 
@@ -47,7 +52,8 @@ fn main() {
                         return;
                     }
 
-                    // Check system shortcuts via dynamic mapping
+                    // Only the two capture surfaces are reachable from other
+                    // apps; everything else is handled inside Riff's windows.
                     {
                         let state = app.state::<AppState>();
                         let action_map = state
@@ -58,30 +64,16 @@ fn main() {
                         let action = action_map.get(&key).cloned();
                         drop(action_map);
 
-                        if let Some(action) = action {
-                            match action.as_str() {
-                                "summon" => {
-                                    show_main(app);
-                                    return;
-                                }
-                                "quickie" => {
-                                    show_quickie(app);
-                                    return;
-                                }
-                                "search" => {
-                                    show_command_palette(app);
-                                    return;
-                                }
-                                "settings" => {
-                                    show_settings(app);
-                                    return;
-                                }
-                                "last_note" => {
-                                    let _ = windows::reopen_last_note(app.clone());
-                                    return;
-                                }
-                                _ => {}
+                        match action.as_deref() {
+                            Some("summon") => {
+                                show_main(app);
+                                return;
                             }
+                            Some("quickie") => {
+                                show_quickie(app);
+                                return;
+                            }
+                            _ => {}
                         }
                     }
 
@@ -100,6 +92,10 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .invoke_handler(tauri::generate_handler![
             notes::save_note,
             notes::update_note,
@@ -112,7 +108,10 @@ fn main() {
             storage::get_drafts_directory,
             publish::publish_riff,
             quickies::append_quickie,
+            quickies::save_quickie_draft,
+            quickies::get_quickie_draft,
             vault::search_vault_links,
+            vault::open_vault_note,
             index::rebuild_index,
             settings::get_settings,
             settings::save_settings,
@@ -122,16 +121,16 @@ fn main() {
             windows::hide_main,
             windows::open_draft,
             windows::open_command_palette,
-            windows::open_search,
-            windows::open_manager,
             windows::open_settings,
+            windows::open_quickie,
             windows::reopen_last_note,
+            windows::focused_riff_window,
+            windows::flush_complete,
             shortcuts::reload_shortcuts,
             shortcuts::pause_shortcuts,
             shortcuts::resume_shortcuts,
             settings::set_dock_icon_visibility,
             settings::set_tray_icon_visibility,
-            settings::save_window_geometry,
             settings::import_theme_file,
             settings::export_theme_file,
             cursor_positions::get_cursor_position,
@@ -148,53 +147,46 @@ fn main() {
             }
             file_watcher::start(app.handle().clone());
 
-            shortcuts::register_shortcuts_from_settings(app.handle(), &settings);
+            // The isolated UI test build leaves the installed app's hotkeys alone.
+            if !(cfg!(debug_assertions) && option_env!("RIFF_TEST_HOME").is_some()) {
+                shortcuts::register_shortcuts_from_settings(app.handle(), &settings);
+            }
 
             #[cfg(target_os = "macos")]
             if settings.hide_dock_icon {
                 settings::apply_dock_icon_visibility(true);
             }
 
-            // Restore window size from settings
-            if let Some((w, h)) = settings.window_size {
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.set_size(tauri::Size::Logical(tauri::LogicalSize::new(w, h)));
-                }
-            }
+            tray::setup_tray(app, settings.launch_at_login)?;
 
-            tray::setup_tray(app)?;
-
-            // Apply tray icon visibility from settings
+            // A menu-bar app with neither icon is unreachable; the loader
+            // already refuses that combination, so this only applies the
+            // sanitized value.
             if settings.hide_tray_icon {
                 if let Some(tray) = app.tray_by_id("main-tray") {
                     let _ = tray.set_visible(false);
                 }
             }
 
-            // Main window: emit blur event so frontend can decide whether to hide
-            if let Some(window) = app.get_webview_window("main") {
-                let w = window.clone();
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(focused) = event {
-                        if !focused {
-                            let _ = w.emit("main-blur", ());
-                        }
-                    }
-                });
-            } else {
-                eprintln!("Warning: main window not found during setup");
-            }
+            settings::apply_launch_at_login(app.handle(), settings.launch_at_login);
 
-            // Quickie window: same blur contract
-            if let Some(window) = app.get_webview_window("quickie") {
-                let w = window.clone();
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(focused) = event {
-                        if !focused {
-                            let _ = w.emit("quickie-blur", ());
+            // Every window hides instead of closing.
+            windows::install_close_guards(app.handle());
+
+            // Capture surfaces emit a blur event so the frontend can decide
+            // whether to tuck themselves away.
+            for label in [windows::MAIN, windows::QUICKIE] {
+                if let Some(window) = app.get_webview_window(label) {
+                    let w = window.clone();
+                    let event_name = format!("{}-blur", label);
+                    window.on_window_event(move |event| {
+                        if let tauri::WindowEvent::Focused(false) = event {
+                            let _ = w.emit(&event_name, ());
                         }
-                    }
-                });
+                    });
+                } else {
+                    eprintln!("Warning: {} window not found during setup", label);
+                }
             }
 
             Ok(())
@@ -205,13 +197,31 @@ fn main() {
             std::process::exit(1);
         })
         .run(|app, event| {
-            if let RunEvent::Opened { urls } = event {
-                let paths = urls
-                    .into_iter()
-                    .filter(|url| url.scheme() == "file")
-                    .filter_map(|url| url.to_file_path().ok())
-                    .collect();
-                handle_opened_files(app, paths);
+            // Quit (menu bar, ⌘Q) waits for the room to write its draft first.
+            if let RunEvent::ExitRequested { api, code, .. } = event {
+                let already_flushing = {
+                    let state = app.state::<AppState>();
+                    let mut flushing = state
+                        .exit_flushing
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    let was = *flushing;
+                    *flushing = true;
+                    was
+                };
+                if already_flushing {
+                    return; // our own exit after the flush — let it through
+                }
+
+                api.prevent_exit();
+                let _ = app.emit_to(EventTarget::labeled(windows::MAIN), "flush-drafts", ());
+
+                let handle = app.clone();
+                let code = code.unwrap_or(0);
+                std::thread::spawn(move || {
+                    wait_for_flush(&handle, EXIT_FLUSH_TIMEOUT);
+                    handle.exit(code);
+                });
             }
         });
 }

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@/platform";
+import { listen } from "@/platform";
 import type { RiffSettings } from "@/types";
 import { resolveTheme, applyThemeToDOM } from "@/themes";
 

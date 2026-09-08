@@ -17,14 +17,14 @@ const light: BuiltinTheme = {
   nameKey: "theme.light",
   isDark: false,
   colors: {
-    bg: "255 252 249",
-    surface: "255 255 255",
-    ink: "26 26 26",
-    stone: "122 122 122",
-    line: "240 238 235",
-    accent: "232 112 95",
-    accent_light: "255 241 238",
-    accent_dark: "214 96 79",
+    bg: "244 230 198",
+    surface: "254 245 222",
+    ink: "53 44 30",
+    stone: "109 95 69",
+    line: "220 203 169",
+    accent: "75 96 188",
+    accent_light: "224 224 215",
+    accent_dark: "61 81 168",
   },
 };
 
@@ -33,14 +33,14 @@ const dark: BuiltinTheme = {
   nameKey: "theme.dark",
   isDark: true,
   colors: {
-    bg: "28 25 23",
-    surface: "41 37 36",
-    ink: "245 240 235",
-    stone: "168 162 158",
-    line: "68 64 60",
-    accent: "232 112 95",
-    accent_light: "61 37 32",
-    accent_dark: "214 96 79",
+    bg: "22 20 15",
+    surface: "31 28 22",
+    ink: "236 228 214",
+    stone: "168 158 141",
+    line: "58 52 42",
+    accent: "142 160 226",
+    accent_light: "37 42 61",
+    accent_dark: "61 81 168",
   },
 };
 
@@ -180,7 +180,7 @@ function computeEditorTokens(colors: ThemeColors, isDark: boolean) {
   const highlightOpacity = isDark ? 0.4 : 0.35;
 
   return {
-    "--editor-placeholder": isDark ? "#666" : "#bbb",
+    "--editor-placeholder": stoneHex,
     "--editor-strikethrough": stoneHex,
     "--editor-code-bg": lineHex,
     "--editor-code-block-bg": isDark ? "#0f0e0d" : "#1a1a1a",

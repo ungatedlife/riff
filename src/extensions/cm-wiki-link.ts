@@ -91,10 +91,11 @@ export function wikiLinkDecorations() {
   );
 }
 
-/** Click handler for wiki-links */
+/** ⌘-click handler for wiki-links. A plain click only places the caret. */
 export function wikiLinkClickHandler(onClick: WikiLinkCallbacks["onClick"]) {
   return EditorView.domEventHandlers({
     click(event: MouseEvent, view: EditorView) {
+      if (!event.metaKey) return false;
       const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
       if (pos === null) return false;
 

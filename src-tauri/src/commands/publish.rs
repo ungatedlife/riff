@@ -41,13 +41,30 @@ fn strip_markdown_markers(line: &str) -> String {
         .to_string()
 }
 
+/// Titles cap at this many characters, cut at a word boundary so a riff
+/// that opens with a long sentence never gets a filename ending mid-word.
+const TITLE_MAX_CHARS: usize = 80;
+
 fn truncate_title(s: &str) -> String {
     let base = if s.is_empty() { "Untitled" } else { s };
-    base.chars()
-        .take(80)
-        .collect::<String>()
-        .trim_end()
-        .to_string()
+    if base.chars().count() <= TITLE_MAX_CHARS {
+        return base.trim_end().to_string();
+    }
+    let cut: String = base.chars().take(TITLE_MAX_CHARS).collect();
+    let next_is_space = base
+        .chars()
+        .nth(TITLE_MAX_CHARS)
+        .map(char::is_whitespace)
+        .unwrap_or(true);
+    let at_boundary = if next_is_space {
+        cut
+    } else {
+        match cut.rfind(char::is_whitespace) {
+            Some(idx) if idx > 0 => cut[..idx].to_string(),
+            _ => cut,
+        }
+    };
+    at_boundary.trim_end().to_string()
 }
 
 /// Derive the riff's title and body. A leading ATX H1 becomes the title and
@@ -66,7 +83,9 @@ fn derive_title(content: &str) -> (String, String) {
 
     let trimmed = first_line.trim();
     if let Some(heading) = trimmed.strip_prefix("# ") {
-        let title = truncate_title(heading.trim());
+        // `# **Bold**` is a bold heading in the room, not a title with
+        // asterisks in it.
+        let title = truncate_title(&strip_markdown_markers(heading));
         let mut body_lines: Vec<&str> = content.lines().skip(idx + 1).collect();
         if body_lines
             .first()
@@ -157,33 +176,65 @@ fn rewrite_and_copy_assets(
     drafts_root: &Path,
     vault: &Path,
 ) -> Result<(String, usize), String> {
-    let filenames = notes::extract_asset_filenames(body);
+    let mut filenames = notes::extract_asset_filenames(body);
+    filenames.sort_by_key(|name| std::cmp::Reverse(name.len()));
+    filenames.dedup();
     if filenames.is_empty() {
         return Ok((body.to_string(), 0));
     }
 
-    let src_dir = drafts_root.join(".assets");
+    let src_dir = drafts_root.join(".assets").canonicalize()
+        .map_err(|_| "The draft's images folder is missing. Your draft has been kept.".to_string())?;
     let dst_dir = vault.join("assets");
-    let mut copied = 0;
+    let mut sources = Vec::new();
+    // Validate and read every image before writing any vault assets.
     for name in &filenames {
-        let src = src_dir.join(name);
-        if !src.exists() {
-            continue;
+        let part = Path::new(name);
+        if part.components().count() != 1 || !matches!(part.components().next(), Some(std::path::Component::Normal(_))) {
+            return Err("An image reference points outside the draft's images folder".to_string());
         }
-        storage::ensure_dir(&dst_dir.to_string_lossy())?;
-        storage::copy_file(
-            &src.to_string_lossy(),
-            &dst_dir.join(name).to_string_lossy(),
-        )?;
-        copied += 1;
+        let src = src_dir.join(name).canonicalize().map_err(|_| format!("Image {} is missing. Your draft has been kept.", name))?;
+        if !src.starts_with(&src_dir) { return Err("An image points outside the draft's images folder".to_string()); }
+        sources.push((name, std::fs::read(src).map_err(|e| e.to_string())?));
     }
-    Ok((body.replace(".assets/", "assets/"), copied))
+    storage::ensure_dir(&dst_dir.to_string_lossy())?;
+    let mut rewritten = body.to_string();
+    let mut copied = 0;
+    for (name, bytes) in sources {
+        let mut destination = dst_dir.join(name);
+        if destination.exists() && std::fs::read(&destination).map_err(|e| e.to_string())? != bytes {
+            let stem = Path::new(name).file_stem().unwrap_or_default().to_string_lossy();
+            let ext = Path::new(name).extension().unwrap_or_default().to_string_lossy();
+            let mut suffix = 2;
+            loop {
+                destination = dst_dir.join(format!("{}-{}.{}", stem, suffix, ext));
+                if !destination.exists() { break; }
+                suffix += 1;
+            }
+        }
+        if !destination.exists() { storage::atomic_write(&destination, &bytes, true)?; copied += 1; }
+        let final_name = destination.file_name().unwrap().to_string_lossy();
+        rewritten = rewritten.replace(&format!(".assets/{}", name), &format!("assets/{}", final_name));
+    }
+    Ok((rewritten, copied))
 }
 
-fn frontmatter(title: &str) -> String {
+/// Title, a URL-safe slug for the site pipeline, and the publish date.
+fn frontmatter(title: &str, slug: &str) -> String {
     let escaped = title.replace('\\', "\\\\").replace('"', "\\\"");
     let date = Local::now().to_rfc3339_opts(SecondsFormat::Secs, true);
-    format!("---\ntitle: \"{}\"\ndate: {}\n---\n\n", escaped, date)
+    format!(
+        "---\ntitle: \"{}\"\nslug: {}\ndate: {}\n---\n\n",
+        escaped, slug, date
+    )
+}
+
+/// Words as the room counts them: tokens with at least one letter or digit,
+/// so bullets and bare markers don't inflate the number.
+fn count_words(body: &str) -> usize {
+    body.split_whitespace()
+        .filter(|w| w.chars().any(char::is_alphanumeric))
+        .count()
 }
 
 #[tauri::command]
@@ -223,18 +274,19 @@ pub fn publish_riff(
     let target = resolve_vault_path(&vault, &filename)?;
     let (rewritten, assets_copied) = rewrite_and_copy_assets(&body, &root, &vault)?;
 
-    let word_count = rewritten.split_whitespace().count();
+    let word_count = count_words(&rewritten);
     let final_content = format!(
         "{}{}",
-        frontmatter(&title),
+        frontmatter(&title, &slug),
         rewritten.trim_start_matches('\n')
     );
 
-    storage::write_file(&target.to_string_lossy(), &final_content)?;
+    storage::atomic_write(&target, final_content.as_bytes(), true)?;
 
     // The riff has left the drafts folder: remove the draft, its assets,
     // its index entry, and its cursor position.
-    notes::delete_note_assets(&content, &root);
+    // Keep source images. Other unfinished riffs may reference the same files.
+    // A future explicit cleanup can collect unreferenced assets safely.
     let _ = storage::delete_file(&path);
     index.remove(&path);
     let _ = cursor_positions::remove_cursor_position(path.clone());
@@ -264,8 +316,8 @@ pub fn publish_riff(
 #[cfg(test)]
 mod tests {
     use super::{
-        derive_title, frontmatter, resolve_vault_path, rewrite_and_copy_assets, sanitize_filename,
-        slugify,
+        count_words, derive_title, frontmatter, resolve_vault_path, rewrite_and_copy_assets,
+        sanitize_filename, slugify,
     };
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -317,10 +369,40 @@ mod tests {
     }
 
     #[test]
-    fn frontmatter_escapes_quotes() {
-        let fm = frontmatter(r#"A "quoted" title"#);
-        assert!(fm.starts_with("---\ntitle: \"A \\\"quoted\\\" title\"\ndate: "));
+    fn frontmatter_escapes_quotes_and_carries_the_slug() {
+        let fm = frontmatter(r#"A "quoted" title"#, "a-quoted-title");
+        assert!(
+            fm.starts_with("---\ntitle: \"A \\\"quoted\\\" title\"\nslug: a-quoted-title\ndate: ")
+        );
         assert!(fm.ends_with("---\n\n"));
+    }
+
+    #[test]
+    fn long_titles_cut_at_a_word_boundary() {
+        let long = "You become who you are by having the conversations you're meant to have, and the breadcrumbs of resonance lead the way";
+        let (title, _) = derive_title(long);
+        assert!(title.chars().count() <= 80);
+        // Cut exactly at a space in the original, never mid-word.
+        assert!(long.starts_with(&format!("{} ", title)), "got: {title}");
+
+        // The 80th character lands inside a word: back up to the last space.
+        let mid_word = format!("{} {}", "a".repeat(70), "b".repeat(20));
+        assert_eq!(derive_title(&mid_word).0, "a".repeat(70));
+
+        // A title that fits is untouched.
+        assert_eq!(derive_title("Short and sweet").0, "Short and sweet");
+    }
+
+    #[test]
+    fn h1_inline_markers_are_stripped() {
+        let (title, body) = derive_title("# **Bold** and *loose*\n\nBody.");
+        assert_eq!(title, "Bold and loose");
+        assert_eq!(body, "Body.");
+    }
+
+    #[test]
+    fn word_count_ignores_markers() {
+        assert_eq!(count_words("- one\n- two\n\n***\n\n**three**"), 3);
     }
 
     #[test]
@@ -364,4 +446,40 @@ mod tests {
         let _ = fs::remove_dir_all(&drafts);
         let _ = fs::remove_dir_all(&vault);
     }
+    #[test]
+    fn missing_image_aborts_before_copying_any_assets() {
+        let drafts = temp_dir("missing-source");
+        let vault = temp_dir("missing-vault");
+        fs::create_dir_all(drafts.join(".assets")).unwrap();
+        fs::write(drafts.join(".assets/valid.png"), b"image").unwrap();
+        assert!(rewrite_and_copy_assets("![](.assets/valid.png) ![](.assets/missing.png)", &drafts, &vault).is_err());
+        assert!(!vault.join("assets/valid.png").exists());
+        let _ = fs::remove_dir_all(drafts); let _ = fs::remove_dir_all(vault);
+    }
+
+    #[test]
+    fn same_named_vault_images_are_preserved() {
+        let drafts = temp_dir("collision-source");
+        let vault = temp_dir("collision-vault");
+        fs::create_dir_all(drafts.join(".assets")).unwrap();
+        fs::create_dir_all(vault.join("assets")).unwrap();
+        fs::write(drafts.join(".assets/pic.png"), b"new image").unwrap();
+        fs::write(vault.join("assets/pic.png"), b"existing image").unwrap();
+        let (body, _) = rewrite_and_copy_assets("![](.assets/pic.png)", &drafts, &vault).unwrap();
+        assert_eq!(body, "![](assets/pic-2.png)");
+        assert_eq!(fs::read(vault.join("assets/pic.png")).unwrap(), b"existing image");
+        let _ = fs::remove_dir_all(drafts); let _ = fs::remove_dir_all(vault);
+    }
+
+    #[test]
+    fn asset_path_cannot_escape_the_draft_image_folder() {
+        let drafts = temp_dir("traversal-source");
+        let vault = temp_dir("traversal-vault");
+        fs::create_dir_all(drafts.join(".assets")).unwrap();
+        fs::write(drafts.join("private.txt"), b"private").unwrap();
+        assert!(rewrite_and_copy_assets("![](.assets/../private.txt)", &drafts, &vault).is_err());
+        assert!(!vault.join("assets/private.txt").exists());
+        let _ = fs::remove_dir_all(drafts); let _ = fs::remove_dir_all(vault);
+    }
+
 }
