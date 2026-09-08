@@ -11,7 +11,8 @@ import { SYSTEM_SHORTCUT_DEFAULTS } from '@/utils/systemShortcuts';
 import { eventMatchesShortcut } from '@/utils/shortcutMatch';
 import { formatShortcutDisplay } from '../ShortcutRecorder';
 import { loadCustomFont } from '@/utils/fonts';
-import type { RiffSettings } from '@/types';
+import type { NoteInfo, RiffSettings } from '@/types';
+import { extractNoteTitle } from '@/utils/notePresentation';
 import Icon from './Icon';
 import Paper from './Paper';
 import Sheet from './Sheet';
@@ -45,11 +46,9 @@ export default function CaptureDesk({ quick = false, onDismiss }: { quick?: bool
   const [publishing, setPublishing] = useState(false);
   const [settingsTab, setSettingsTab] = useState('Writing');
   const [copyOpen, setCopyOpen] = useState(false);
-  const [noteCount, setNoteCount] = useState(0);
-  const [promptIndex, setPromptIndex] = useState(0);
+  const [notes, setNotes] = useState<NoteInfo[]>([]);
   const cursorReady = useRef(false);
   const cursorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prompt = ['Follow the thought.', 'What feels alive?', 'Say the true thing.', 'Start with the messy bit.'][promptIndex];
   const empty = isMarkdownEffectivelyEmpty(draft.text);
   const words = countWords(draft.text);
   const shortcuts = { ...SYSTEM_SHORTCUT_DEFAULTS, ...settings.system_shortcuts };
@@ -85,7 +84,7 @@ export default function CaptureDesk({ quick = false, onDismiss }: { quick?: bool
     return () => { window.removeEventListener('blur', onBlur); void off.then(fn => fn()); };
   }, [session, quick]);
   useEffect(() => {
-    const refresh = () => invoke<unknown[]>('list_notes').then(n => setNoteCount(n.length)).catch(() => {});
+    const refresh = () => invoke<NoteInfo[]>('list_notes').then(setNotes).catch(() => {});
     void refresh(); const off = listen('files-changed', refresh);
     return () => { void off.then(fn => fn()); };
   }, []);
@@ -93,7 +92,7 @@ export default function CaptureDesk({ quick = false, onDismiss }: { quick?: bool
     if (!ready || panel || complete) return;
     const timer = setTimeout(() => editor.current?.focus(), 50);
     return () => clearTimeout(timer);
-  }, [ready, draft.id, panel, complete]);
+  }, [ready, draft.id, panel, complete, focus]);
   useEffect(() => {
     if (!quick || !complete) return;
     const timer = setTimeout(() => { setComplete(null); void dismiss(); }, 900);
@@ -232,25 +231,51 @@ export default function CaptureDesk({ quick = false, onDismiss }: { quick?: bool
     catch (e) { notify(e); return null; }
   }, [notify]);
   const storedText = draft.path && isNative ? resolveImagePaths(draft.text, draft.path.slice(0, draft.path.lastIndexOf('/')), convertFileSrc) : draft.text;
-  const saveText = ({ empty: 'A little room for a thought', waiting: 'Saving your thought…', saving: 'Saving your thought…', saved: isNative ? 'Draft saved on this Mac' : 'Saved in this browser', error: 'Your draft needs attention' })[draft.status];
+  const saveText = ({ empty: 'New draft', waiting: 'Saving…', saving: 'Saving…', saved: isNative ? 'Saved on this Mac' : 'Saved in this browser', error: 'Couldn’t save draft' })[draft.status];
   const destination = quick ? settings.quickies_file?.split('/').pop() || 'Quickies.md' : settings.vault_dir?.split('/').pop();
+  const sendButton = <button className="primary-button send-button" disabled={empty || draft.locked || !ready} onClick={() => void send()}>{publishing ? 'Sending…' : quick ? 'Save quickie' : 'Send to vault'}<kbd>⌘↵</kbd></button>;
   return <main className={`capture-desk ${quick ? 'quickie-desk' : ''} ${focus ? 'focus-view' : ''} ${!empty ? 'has-writing' : ''}`} style={{ '--editor-font-size': `${quick ? Math.min(settings.font_size, 20) : settings.font_size}px`, '--editor-font-family': settings.font_family ? `"${settings.font_family}", "iA Writer Duo S", monospace` : '"iA Writer Duo S", monospace' } as React.CSSProperties}>
     <Paper/>
-    {!quick ? <header className="desk-header" data-tauri-drag-region>
-      <button className="wordmark" aria-label="New riff" onClick={() => void fresh()}>riff<span>✳</span></button>
-      <nav className="mode-switch" aria-label="Capture mode"><button onClick={() => void invoke('open_quickie').catch(notify)}><Icon name="spark" size={16}/>quickie</button><button aria-current="page"><Icon name="riff" size={19}/>riff</button></nav>
-      <div className="desk-header-actions"><button className="shelf-button" onClick={() => setPanel('drafts')} title="Unfinished thoughts · ⌘K"><Icon name="shelf"/><span>Drafts</span>{noteCount > 0 && <small>{noteCount}</small>}</button><button className="icon-button" aria-label="Settings" title="Settings · ⌘," onClick={() => setPanel('settings')}><Icon name="settings"/></button></div>
-    </header> : <header className="quickie-header" data-tauri-drag-region><span className="quickie-brand"><Icon name="spark"/>quickie<span className="small-label">by riff</span></span><button className="icon-button" aria-label="Save and close quickie" onClick={() => void park()}><Icon name="close" size={16}/></button></header>}
-    {complete ? <section className="completion" role="status"><div className="completion-orbit"><Icon name="check" size={34}/></div><span className="eyebrow">{isNative ? quick ? 'SAFELY SAVED' : 'SAFELY IN YOUR VAULT' : 'SAVED IN THE PREVIEW'}</span><h1>{quick ? 'Thought caught.' : 'Out of your head.\nInto the world.'}</h1>{!quick && <p className="completion-title">{complete.title}</p>}<p>{quick ? 'A little less to carry.' : `${complete.words} words. A thought with a life of its own.`}</p><div className="completion-actions"><button className="primary-button" onClick={() => void fresh()}>Another thought<Icon name="plus" size={16}/></button><button className="text-button" onClick={() => { setComplete(null); void dismiss(); }}>Done for now</button></div>{!quick && <div className="completion-links"><button className="text-button" onClick={() => void copy(false)}><Icon name="copy" size={15}/>Copy Markdown</button>{isNative && <button className="text-button" onClick={() => void open(`obsidian://open?path=${encodeURIComponent(complete.path)}`).catch(notify)}><Icon name="vault" size={15}/>Open in Obsidian</button>}</div>}{!isNative && <small>Your real vault is connected in the Mac app.</small>}</section> : <>
-      {!quick && <div className="page-meta"><span className="eyebrow"><span className="ink-dot"/>DEEP CAPTURE</span><span>{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric' })}</span></div>}
-      <section className="writing-page" aria-label={quick ? 'Quick capture' : 'Writing room'}>
-        {ready && <Editor key={draft.id} ref={editor} initialContent={storedText} onChange={text => session.edit(unresolveImagePaths(text))} readOnly={draft.locked} placeholder={quick ? 'Catch the little thing.' : prompt} showFormatToolbar={!quick && format && !focus} textDirection={settings.text_direction as 'auto' | 'ltr' | 'rtl'} forgedCaret onPublish={() => void send()} onImagePaste={quick ? undefined : imagePaste} onImageDropPath={quick ? undefined : imageDrop} onWikiLinkClick={(_slug, path) => void openDraft(path).catch(notify)} onCursorChange={saveCursor}/>} 
-        {empty && <div className="writing-whisper">{quick ? 'A sentence, a spark, something for later.' : 'A fragment is a perfectly good beginning.'}</div>}
-      </section>
-      {!quick && <div className="page-tools"><button className="text-button" onClick={() => void park()} disabled={draft.locked}>Set aside<kbd>esc</kbd></button><div className="page-tools-right"><button className="icon-button type-button" aria-label="Formatting tools" aria-pressed={format} onClick={() => setFormat(v => !v)}>Aa</button><button className="icon-button" aria-label={focus ? 'Leave focus view' : 'Focus view'} title={`Focus view · ${formatShortcutDisplay(shortcuts.zen_mode)}`} aria-pressed={focus} onClick={() => setFocus(v => !v)}><Icon name="focus" size={17}/></button><div className="copy-control"><button className="icon-button" aria-label="Copy options" disabled={empty} aria-expanded={copyOpen} onClick={() => setCopyOpen(v => !v)}><Icon name="copy" size={16}/></button>{copyOpen && <div className="copy-menu"><button onClick={() => void copy(false)}>Copy Markdown</button><button onClick={() => void copy(true)}>Copy formatted text</button></div>}</div></div></div>}
-      <footer className="capture-footer"><div className="draft-status" role="status"><span className={`status-dot ${draft.status}`}/><span>{quick ? draft.status === 'saved' ? 'Draft saved' : 'QUICK CAPTURE' : saveText}</span></div><span className="word-meter">{words > 0 ? `${words} ${words === 1 ? 'word' : 'words'}` : 'yours, at your pace'}</span><button className="primary-button" disabled={empty || draft.locked || !ready} onClick={() => void send()}>{publishing ? 'Sending…' : quick ? 'Catch it' : 'Send to vault'}<kbd>⌘↵</kbd></button></footer>
-      {quick ? <div className="quickie-bottom"><span>{isNative ? `→ ${destination}` : 'Browser preview'}</span><button className="text-button" disabled={empty || draft.locked} onClick={() => void deepen()}>There’s more here<Icon name="arrow" size={15}/></button></div> : <div className="desk-bottom"><button className="destination-button" onClick={() => { setSettingsTab('Files'); setPanel('settings'); }}><Icon name="vault" size={13}/>{isNative ? destination ? `To ${destination}` : 'Connect your Obsidian vault' : 'Browser preview · local drafts'}</button>{empty ? <button className="prompt-button" onClick={() => setPromptIndex(i => (i + 1) % 4)}>Another way in<Icon name="riff" size={15}/></button> : <span className="permission-note">One thought is enough.</span>}</div>}
-    </>}
+    {!quick && <aside className="notebook-margin" aria-label="Notebook">
+      <header className="margin-brand" data-tauri-drag-region><span className="wordmark">riff<span>✳</span></span><button className="icon-button" aria-label="Settings" title="Settings · ⌘," onClick={() => setPanel('settings')}><Icon name="settings" size={17}/></button></header>
+      <div className="margin-actions">
+        <button className="new-riff-button" aria-label="New riff" disabled={draft.locked} onClick={() => void fresh()} title="New riff · ⌘N"><Icon name="plus" size={17}/><span>New riff</span><kbd>⌘N</kbd></button>
+        <button className="quickie-button" aria-label="Open quickie" onClick={() => void invoke('open_quickie').catch(notify)} title="Open quickie"><Icon name="spark" size={18}/><span>Quickie<small>A passing thought</small></span><Icon name="arrow" size={14}/></button>
+      </div>
+      <div className="margin-section-heading"><span>Drafts <small>{notes.length}</small></span><button className="icon-button" aria-label="Search drafts" title="Search drafts · ⌘K" onClick={() => setPanel('drafts')}><Icon name="search" size={15}/></button></div>
+      <nav className="margin-drafts" aria-label="Recent drafts">
+        {notes.length ? notes.slice(0, 12).map(note => {
+          const current = note.path === draft.path;
+          const text = current ? draft.text : note.content;
+          return <button key={note.path} className="margin-draft" aria-current={current ? 'page' : undefined} disabled={draft.locked} onClick={() => void openDraft(note.path).catch(notify)}>
+            <span>{extractNoteTitle(text) || 'Untitled riff'}</span>
+            <small>{current ? 'Writing now' : new Date(note.created).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}<span>·</span>{countWords(text)} words</small>
+          </button>;
+        }) : <p className="margin-empty">Your drafts collect here<br/>as you write.</p>}
+      </nav>
+      <button className="all-drafts-button text-button" aria-label="All drafts" title="All drafts · ⌘K" onClick={() => setPanel('drafts')}><Icon name="shelf" size={16}/><span>All drafts</span><kbd>⌘K</kbd></button>
+      <button className="vault-connection" aria-label="Obsidian connection" title="Obsidian connection" onClick={() => { setSettingsTab('Files'); setPanel('settings'); }}><Icon name="vault" size={19}/><span>{isNative ? destination || 'Connect Obsidian' : 'Browser preview'}<small>{isNative ? destination ? 'Your Obsidian folder' : 'Choose a home for your writing' : 'Drafts stay in this browser'}</small></span></button>
+    </aside>}
+    <div className="notebook-paper">
+      <Paper/>
+      {quick ? <header className="quickie-header" data-tauri-drag-region><span className="quickie-brand"><Icon name="spark" size={18}/>Quickie</span><button className="icon-button" aria-label="Save and close quickie" onClick={() => void park()}><Icon name="close" size={16}/></button></header> : <header className="document-toolbar" data-tauri-drag-region>
+        <div className="document-context"><Icon name="riff" size={19}/><span>{complete ? 'Sent' : 'Writing'}</span></div>
+        <div className="document-tools">
+          {!complete && <><button className="icon-button type-button" aria-label="Formatting tools" aria-pressed={format} onClick={() => setFormat(v => !v)}>Aa</button>
+          <button className="icon-button focus-button" aria-label={focus ? 'Leave focus view' : 'Focus view'} title={`Focus view · ${formatShortcutDisplay(shortcuts.zen_mode)}`} aria-pressed={focus} onClick={() => setFocus(v => !v)}><Icon name="focus" size={16}/></button>
+          <div className="copy-control"><button className="icon-button" aria-label="Copy options" disabled={empty} aria-expanded={copyOpen} onClick={() => setCopyOpen(v => !v)}><Icon name="copy" size={16}/></button>{copyOpen && <div className="copy-menu"><button onClick={() => void copy(false)}>Copy Markdown</button><button onClick={() => void copy(true)}>Copy formatted text</button></div>}</div>
+          <span className="toolbar-divider"/>{sendButton}</>}
+        </div>
+      </header>}
+      {complete ? <section className="completion" role="status"><div className="completion-mark"><Icon name="check" size={22}/></div><h1>{quick ? 'Quickie saved.' : isNative ? 'In your vault.' : 'Saved in the preview.'}</h1>{!quick && <p className="completion-title">{complete.title}</p>}<p>{quick ? destination : `${complete.words} words`}</p><div className="completion-actions"><button className="primary-button" onClick={() => void fresh()}><Icon name="plus" size={16}/>New riff</button><button className="text-button" onClick={() => { setComplete(null); void dismiss(); }}>Close</button></div>{!quick && <div className="completion-links"><button className="text-button" onClick={() => void copy(false)}><Icon name="copy" size={15}/>Copy Markdown</button>{isNative && <button className="text-button" onClick={() => void open(`obsidian://open?path=${encodeURIComponent(complete.path)}`).catch(notify)}><Icon name="vault" size={15}/>Open in Obsidian</button>}</div>}{!isNative && <small>Your real vault is connected in the Mac app.</small>}</section> : <>
+        {!quick && <div className="page-date">{new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}<span className="page-date-line"/></div>}
+        <section className="writing-page" aria-label={quick ? 'Quick capture' : 'Writing room'}>
+          {ready && <Editor key={draft.id} ref={editor} initialContent={storedText} onChange={text => session.edit(unresolveImagePaths(text))} readOnly={draft.locked} placeholder={quick ? 'A thought for later…' : 'Begin anywhere…'} showFormatToolbar={!quick && format && !focus} textDirection={settings.text_direction as 'auto' | 'ltr' | 'rtl'} forgedCaret onPublish={() => void send()} onImagePaste={quick ? undefined : imagePaste} onImageDropPath={quick ? undefined : imageDrop} onWikiLinkClick={(_slug, path) => void openDraft(path).catch(notify)} onCursorChange={saveCursor}/>}
+        </section>
+        {quick ? <footer className="quickie-footer"><button className="text-button" disabled={empty || draft.locked} onClick={() => void deepen()}>Keep going in riff<Icon name="arrow" size={14}/></button>{sendButton}</footer> : <footer className="page-footer"><div className="page-status"><span className="draft-status" role="status"><span className={`status-dot ${draft.status}`}/>{saveText}</span>{words > 0 && <span className="word-meter">{words} {words === 1 ? 'word' : 'words'}</span>}</div><button className="text-button" onClick={() => void park()} disabled={draft.locked}>Set aside<kbd>esc</kbd></button></footer>}
+        {quick && <div className="quickie-bottom"><span className="draft-status" role="status"><span className={`status-dot ${draft.status}`}/>{saveText}</span><span>{isNative ? destination : 'Browser preview'}</span></div>}
+      </>}
+    </div>
     {(draft.error || message) && <div className={`desk-message ${draft.error ? 'is-error' : ''}`} role={draft.error ? 'alert' : 'status'}>{draft.error || message}{draft.error && <button className="text-button" onClick={() => void session.flush().catch(() => {})}>Try saving again</button>}</div>}
     {panel === 'settings' && <Sheet label="Settings" onClose={() => setPanel(null)}><Preferences initialTab={settingsTab} onClose={() => setPanel(null)}/></Sheet>}
     {panel === 'drafts' && <Sheet label="Unfinished thoughts" onClose={() => setPanel(null)}><DraftShelf currentPath={draft.path} onOpen={openDraft} onNew={() => void fresh()} onClose={() => setPanel(null)}/></Sheet>}

@@ -4,15 +4,15 @@
 
 Riff is Rob’s macOS writing room for catching a thought and following it somewhere. Quickie captures a fragment. Riff gives it room to unfold. Finished writing lands in an Obsidian vault as ordinary Markdown.
 
-The visual language comes from Bricks. Woven paper, warm light and dark palettes, indigo and amber ink, restrained glass surfaces, iA Writer Duo body text, and bookish serif headings.
+The interface is an open notebook with a draft margin, a paper page, and a compact writing toolbar. The visual language comes from Bricks. Woven paper, warm light and dark palettes, indigo and amber ink, restrained glass surfaces, iA Writer Duo body text, and bookish serif headings.
 
 ## Two ways in
 
-**Quickie** opens a compact window with Hyper+Q. Write a fragment and use ⌘↵ to append it to your running Quickies.md note. “There’s more here” saves that fragment as a riff and brings it into the writing room. Escape saves the unfinished quickie and tucks it away.
+**Quickie** opens a compact window with Hyper+Q. Write a fragment and use ⌘↵ to append it to your running Quickies.md note. “Keep going in riff” saves that fragment as a riff and brings it into the writing room. Escape saves the unfinished quickie and tucks it away.
 
 **Riff** opens the writing room with Hyper+R. The live Markdown editor supports headings, emphasis, lists, tasks, tables, images, links, wiki links, undo, native spellcheck, and find. Use the Aa button for formatting tools. Focus view with ⌘. leaves more space around the words.
 
-The Drafts shelf holds unfinished riffs. ⌘K opens it. ⌘N starts a new riff after saving the current one. Escape saves and hides the room. Shortcuts can be changed in Settings.
+The notebook margin shows recent drafts with their titles and word counts. ⌘K opens the full searchable list. Narrow windows collapse the margin to a small navigation spine. ⌘N starts a new riff after saving the current one. Escape saves and hides the room. Shortcuts can be changed in Settings.
 
 ## Your words
 

@@ -42,12 +42,12 @@ export default function Preferences({ onClose, initialTab = 'Writing' }: { onClo
     catch (e) { setError(String(e)); }
   };
   return <section className="preferences">
-    <header className="panel-header" data-tauri-drag-region><div><span className="eyebrow">MAKE YOURSELF AT HOME</span><h2>Your room.</h2></div><button className="icon-button" aria-label="Close settings" disabled={saving} onClick={onClose}><Icon name="close" /></button></header>
+    <header className="panel-header" data-tauri-drag-region><div><h2>Settings</h2></div><button className="icon-button" aria-label="Close settings" disabled={saving} onClick={onClose}><Icon name="close" /></button></header>
     <nav className="panel-tabs" aria-label="Settings sections">{['Writing', 'Files', 'Keys'].map(label => <button key={label} aria-pressed={tab === label} onClick={() => setTab(label)}>{label}</button>)}</nav>
     {error && <p className="inline-error" role="alert">{error}</p>}
     {!settings ? <p className="panel-empty">Opening settings…</p> : <div className="preferences-body" aria-busy={saving}>
       {tab === 'Writing' && <>
-        <label className="setting-label">The feel of the room</label>
+        <label className="setting-label">Appearance</label>
         <div className="theme-options">{[{ id: 'light', name: 'Paper', icon: 'sun' as const }, { id: 'dark', name: 'Ink', icon: 'moon' as const }, { id: 'system', name: 'With the day', icon: 'spark' as const }].map(theme => <button disabled={saving} key={theme.id} className={`theme-option theme-${theme.id}`} aria-pressed={(settings.active_theme || 'system') === theme.id} onClick={() => void change({ active_theme: theme.id })}><Icon name={theme.icon} size={24} /><span>{theme.name}</span></button>)}</div>
         <div className="setting-row"><div><label htmlFor="type-size">Writing size</label><p>Room to hear yourself think.</p></div><select id="type-size" disabled={saving} value={settings.font_size} onChange={e => void change({ font_size: Number(e.target.value) })}>{Array.from(new Set([18, 19, 20, 21, 22, 24, 26, 28, settings.font_size])).sort((a,b) => a-b).map(n => <option key={n} value={n}>{n} px</option>)}</select></div>
         <div className="setting-row"><div><label htmlFor="typeface">Typeface</label><p>iA Writer Duo, the same face as Bricks.</p></div><select id="typeface" disabled={saving} value={settings.font_family || ''} onChange={e => void change({ font_family: e.target.value || null })}><option value="">iA Writer Duo</option><option value="Georgia">Bookish serif</option><option value="Menlo">Classic mono</option>{settings.font_family && !['Georgia', 'Menlo'].includes(settings.font_family) && <option>{settings.font_family}</option>}</select></div>
@@ -67,6 +67,6 @@ export default function Preferences({ onClose, initialTab = 'Writing' }: { onClo
         <label className="setting-row"><span>Ready when I log in</span><input type="checkbox" disabled={saving} checked={settings.launch_at_login} onChange={e => void change({ launch_at_login: e.target.checked })}/></label>
       </>}
     </div>}
-    <footer className="preferences-footer"><span>riff <span className="tiny-star">✳</span> a Rob app</span><span role="status">{saving ? 'Saving…' : 'A little room for what’s alive.'}</span></footer>
+    <footer className="preferences-footer"><span>riff <span className="tiny-star">✳</span> a Rob app</span><span role="status">{saving ? 'Saving…' : 'Saved automatically'}</span></footer>
   </section>;
 }
