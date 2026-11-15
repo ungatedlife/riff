@@ -2,15 +2,18 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::settings;
 
 /// Get the drafts directory: the configured `drafts_dir`, or ~/Documents/Riff.
 pub fn notes_root() -> Result<PathBuf, String> {
     #[cfg(debug_assertions)]
-    if let Some(root) = std::env::var("RIFF_TEST_HOME").ok().or_else(|| option_env!("RIFF_TEST_HOME").map(String::from)) {
+    if let Some(root) = std::env::var("RIFF_TEST_HOME")
+        .ok()
+        .or_else(|| option_env!("RIFF_TEST_HOME").map(String::from))
+    {
         let drafts = PathBuf::from(root).join("Drafts");
         fs::create_dir_all(&drafts).map_err(|e| e.to_string())?;
         return Ok(drafts);
@@ -49,7 +52,6 @@ pub fn write_file(path: &str, content: &str) -> Result<(), String> {
     atomic_write(std::path::Path::new(path), content.as_bytes(), false)
 }
 
-
 static WRITE_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Stage beside the destination, flush, then publish a complete file.
@@ -57,15 +59,30 @@ static WRITE_ID: AtomicU64 = AtomicU64::new(0);
 pub fn atomic_write(path: &std::path::Path, bytes: &[u8], new_only: bool) -> Result<(), String> {
     let target = if !new_only && path.exists() {
         path.canonicalize().map_err(|e| e.to_string())?
-    } else { path.to_path_buf() };
+    } else {
+        path.to_path_buf()
+    };
     let parent = target.parent().ok_or("File has no parent folder")?;
-    let temporary = parent.join(format!(".riff-write-{}-{}", std::process::id(), WRITE_ID.fetch_add(1, Ordering::Relaxed)));
+    let temporary = parent.join(format!(
+        ".riff-write-{}-{}",
+        std::process::id(),
+        WRITE_ID.fetch_add(1, Ordering::Relaxed)
+    ));
     let result = (|| -> std::io::Result<()> {
-        let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&temporary)?;
-        if let Ok(metadata) = fs::metadata(&target) { file.set_permissions(metadata.permissions())?; }
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        if let Ok(metadata) = fs::metadata(&target) {
+            file.set_permissions(metadata.permissions())?;
+        }
         file.write_all(bytes)?;
         file.sync_all()?;
-        if new_only { fs::hard_link(&temporary, &target)?; } else { fs::rename(&temporary, &target)?; }
+        if new_only {
+            fs::hard_link(&temporary, &target)?;
+        } else {
+            fs::rename(&temporary, &target)?;
+        }
         Ok(())
     })();
     let _ = fs::remove_file(&temporary);

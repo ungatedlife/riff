@@ -209,9 +209,14 @@ fn normalize_loaded_settings(mut settings: RiffSettings) -> RiffSettings {
 
 pub(crate) fn get_settings_path() -> Result<PathBuf, String> {
     #[cfg(debug_assertions)]
-    if let Some(root) = std::env::var("RIFF_TEST_HOME").ok().or_else(|| option_env!("RIFF_TEST_HOME").map(String::from)) {
+    if let Some(root) = std::env::var("RIFF_TEST_HOME")
+        .ok()
+        .or_else(|| option_env!("RIFF_TEST_HOME").map(String::from))
+    {
         let config = PathBuf::from(root);
-        if !config.is_absolute() { return Err("RIFF_TEST_HOME must be absolute".to_string()); }
+        if !config.is_absolute() {
+            return Err("RIFF_TEST_HOME must be absolute".to_string());
+        }
         fs::create_dir_all(&config).map_err(|e| e.to_string())?;
         return Ok(config.join("settings.json"));
     }
@@ -509,12 +514,20 @@ mod tests {
 
     #[test]
     fn both_icons_can_never_be_hidden_at_once() {
-        let settings = RiffSettings { hide_dock_icon: true, hide_tray_icon: true, ..RiffSettings::default() };
+        let settings = RiffSettings {
+            hide_dock_icon: true,
+            hide_tray_icon: true,
+            ..RiffSettings::default()
+        };
         let normalized = normalize_loaded_settings(settings);
         assert!(normalized.hide_dock_icon);
         assert!(!normalized.hide_tray_icon);
 
-        let settings = RiffSettings { hide_dock_icon: false, hide_tray_icon: true, ..RiffSettings::default() };
+        let settings = RiffSettings {
+            hide_dock_icon: false,
+            hide_tray_icon: true,
+            ..RiffSettings::default()
+        };
         assert!(normalize_loaded_settings(settings).hide_tray_icon);
     }
 
@@ -537,7 +550,11 @@ mod tests {
 
     #[test]
     fn normalization_falls_back_to_legacy_theme_mode_when_active_theme_is_invalid() {
-        let settings = RiffSettings { theme_mode: "dark".to_string(), active_theme: "removed-custom-theme".to_string(), ..RiffSettings::default() };
+        let settings = RiffSettings {
+            theme_mode: "dark".to_string(),
+            active_theme: "removed-custom-theme".to_string(),
+            ..RiffSettings::default()
+        };
 
         let normalized = normalize_loaded_settings(settings);
         assert_eq!(normalized.active_theme, "dark");

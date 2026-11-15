@@ -267,7 +267,13 @@ pub struct Vocabulary {
 }
 
 /// Folders the site's sync ignores, so their properties don't count.
-const VOCAB_SKIP_DIRS: &[&str] = &["Templates", "_templates", "Bases", "Journals", "Freewriting"];
+const VOCAB_SKIP_DIRS: &[&str] = &[
+    "Templates",
+    "_templates",
+    "Bases",
+    "Journals",
+    "Freewriting",
+];
 
 fn collect_typed_notes(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
     if depth > MAX_DEPTH {
@@ -351,11 +357,19 @@ fn tally(root: &Path) -> Vocabulary {
     for (lower, spellings) in &conversations {
         let count = spellings.values().sum();
         let name = hubs.get(lower).cloned().unwrap_or_else(|| pick(spellings));
-        conv_entries.push(VocabEntry { name, count, hub: hubs.contains_key(lower) });
+        conv_entries.push(VocabEntry {
+            name,
+            count,
+            hub: hubs.contains_key(lower),
+        });
     }
     for (lower, name) in &hubs {
         if !conversations.contains_key(lower) {
-            conv_entries.push(VocabEntry { name: name.clone(), count: 0, hub: true });
+            conv_entries.push(VocabEntry {
+                name: name.clone(),
+                count: 0,
+                hub: true,
+            });
         }
     }
     // Hubs first, then by use, then by name.
@@ -368,11 +382,22 @@ fn tally(root: &Path) -> Vocabulary {
 
     let mut topic_entries: Vec<VocabEntry> = topics
         .values()
-        .map(|spellings| VocabEntry { name: pick(spellings), count: spellings.values().sum(), hub: false })
+        .map(|spellings| VocabEntry {
+            name: pick(spellings),
+            count: spellings.values().sum(),
+            hub: false,
+        })
         .collect();
-    topic_entries.sort_by(|a, b| b.count.cmp(&a.count).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    topic_entries.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
 
-    Vocabulary { conversations: conv_entries, topics: topic_entries }
+    Vocabulary {
+        conversations: conv_entries,
+        topics: topic_entries,
+    }
 }
 
 struct VocabCache {
@@ -396,13 +421,19 @@ pub fn vault_vocabulary() -> Result<Vocabulary, String> {
         }
     }
     let vocabulary = tally(&root);
-    *cache = Some(VocabCache { root, scanned_at: Instant::now(), vocabulary: vocabulary.clone() });
+    *cache = Some(VocabCache {
+        root,
+        scanned_at: Instant::now(),
+        vocabulary: vocabulary.clone(),
+    });
     Ok(vocabulary)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{collect_md_notes, find_vault_root, obsidian_url, percent_encode, rank, tally, VaultLink};
+    use super::{
+        collect_md_notes, find_vault_root, obsidian_url, percent_encode, rank, tally, VaultLink,
+    };
     use std::path::Path;
 
     #[test]
@@ -523,19 +554,49 @@ mod tests {
     fn vocabulary_counts_typed_notes_and_prefers_hub_spelling() {
         let vault = temp_vault();
         fs::create_dir_all(vault.join("Conversations")).unwrap();
-        fs::write(vault.join("Conversations/Befriending shame.md"), "---\ntype: conversation\nstatus:\n  - draft\n---\n").unwrap();
+        fs::write(
+            vault.join("Conversations/Befriending shame.md"),
+            "---\ntype: conversation\nstatus:\n  - draft\n---\n",
+        )
+        .unwrap();
         fs::write(vault.join("a.md"), "---\ntype: riff\ntopics:\n  - recovery\n  - Money\nconversations:\n  - befriending shame\n---\n").unwrap();
-        fs::write(vault.join("b.md"), "---\ntype: spark\ntopics: [recovery]\nconversations:\n  - Ember 2026\n---\n").unwrap();
+        fs::write(
+            vault.join("b.md"),
+            "---\ntype: spark\ntopics: [recovery]\nconversations:\n  - Ember 2026\n---\n",
+        )
+        .unwrap();
         // Untyped notes and template folders don't count.
-        fs::write(vault.join("c.md"), "---\ntopics:\n  - ignored\nconversations:\n  - ignored\n---\n").unwrap();
+        fs::write(
+            vault.join("c.md"),
+            "---\ntopics:\n  - ignored\nconversations:\n  - ignored\n---\n",
+        )
+        .unwrap();
         fs::create_dir_all(vault.join("Templates")).unwrap();
-        fs::write(vault.join("Templates/Spark.md"), "---\ntype: spark\ntopics:\n  - templated\n---\n").unwrap();
+        fs::write(
+            vault.join("Templates/Spark.md"),
+            "---\ntype: spark\ntopics:\n  - templated\n---\n",
+        )
+        .unwrap();
 
         let v = tally(&vault);
-        let convs: Vec<(String, usize, bool)> = v.conversations.iter().map(|e| (e.name.clone(), e.count, e.hub)).collect();
-        assert_eq!(convs, vec![("Befriending shame".to_string(), 1, true), ("Ember 2026".to_string(), 1, false)]);
-        let topics: Vec<(String, usize)> = v.topics.iter().map(|e| (e.name.clone(), e.count)).collect();
-        assert_eq!(topics, vec![("recovery".to_string(), 2), ("Money".to_string(), 1)]);
+        let convs: Vec<(String, usize, bool)> = v
+            .conversations
+            .iter()
+            .map(|e| (e.name.clone(), e.count, e.hub))
+            .collect();
+        assert_eq!(
+            convs,
+            vec![
+                ("Befriending shame".to_string(), 1, true),
+                ("Ember 2026".to_string(), 1, false)
+            ]
+        );
+        let topics: Vec<(String, usize)> =
+            v.topics.iter().map(|e| (e.name.clone(), e.count)).collect();
+        assert_eq!(
+            topics,
+            vec![("recovery".to_string(), 2), ("Money".to_string(), 1)]
+        );
         let _ = fs::remove_dir_all(&vault);
     }
 }

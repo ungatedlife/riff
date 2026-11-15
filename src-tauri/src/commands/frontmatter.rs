@@ -93,7 +93,9 @@ fn parse_inline_list(inner: &str) -> Vec<String> {
 /// has no front matter block at all.
 pub fn parse(content: &str) -> Option<(Frontmatter, &str)> {
     let rest = content.strip_prefix("---")?;
-    let rest = rest.strip_prefix("\r\n").or_else(|| rest.strip_prefix('\n'))?;
+    let rest = rest
+        .strip_prefix("\r\n")
+        .or_else(|| rest.strip_prefix('\n'))?;
     // Find the closing fence on its own line.
     let mut offset = 0;
     let mut end = None;
@@ -161,7 +163,9 @@ pub fn quote(value: &str) -> String {
         || value.contains(": ")
         || value.ends_with(':')
         || value.contains(" #")
-        || value.starts_with(['#', '[', ']', '{', '}', '&', '*', '!', '|', '>', '\'', '"', '%', '@', '`', '-', '?'])
+        || value.starts_with([
+            '#', '[', ']', '{', '}', '&', '*', '!', '|', '>', '\'', '"', '%', '@', '`', '-', '?',
+        ])
         || value.trim() != value
         || matches!(
             value.to_ascii_lowercase().as_str(),
@@ -247,7 +251,10 @@ mod tests {
             ),
             "riffs-on:\n  - \"[[Growth is death]]\"\n  - plain\n"
         );
-        assert_eq!(yaml_scalar("date", "2026-09-14 19:00"), "date: 2026-09-14 19:00\n");
+        assert_eq!(
+            yaml_scalar("date", "2026-09-14 19:00"),
+            "date: 2026-09-14 19:00\n"
+        );
         assert_eq!(quote("Ember 2026"), "Ember 2026");
         assert_eq!(quote("a: b"), "\"a: b\"");
         assert_eq!(quote("2026"), "\"2026\"");
@@ -256,7 +263,11 @@ mod tests {
 
     #[test]
     fn written_lists_read_back() {
-        let items = vec!["[[A#^b]]".to_string(), "It's fine".to_string(), "x: y".to_string()];
+        let items = vec![
+            "[[A#^b]]".to_string(),
+            "It's fine".to_string(),
+            "x: y".to_string(),
+        ];
         let text = format!("---\n{}---\n", yaml_list("k", &items));
         let (fm, _) = parse(&text).unwrap();
         assert_eq!(fm.list("k"), items);

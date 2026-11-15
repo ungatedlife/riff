@@ -168,18 +168,29 @@ fn rewrite_and_copy_assets(
         return Ok((body.to_string(), 0));
     }
 
-    let src_dir = drafts_root.join(".assets").canonicalize()
-        .map_err(|_| "The draft's images folder is missing. Your draft has been kept.".to_string())?;
+    let src_dir = drafts_root.join(".assets").canonicalize().map_err(|_| {
+        "The draft's images folder is missing. Your draft has been kept.".to_string()
+    })?;
     let dst_dir = vault.join("assets");
     let mut sources = Vec::new();
     // Validate and read every image before writing any vault assets.
     for name in &filenames {
         let part = Path::new(name);
-        if part.components().count() != 1 || !matches!(part.components().next(), Some(std::path::Component::Normal(_))) {
+        if part.components().count() != 1
+            || !matches!(
+                part.components().next(),
+                Some(std::path::Component::Normal(_))
+            )
+        {
             return Err("An image reference points outside the draft's images folder".to_string());
         }
-        let src = src_dir.join(name).canonicalize().map_err(|_| format!("Image {} is missing. Your draft has been kept.", name))?;
-        if !src.starts_with(&src_dir) { return Err("An image points outside the draft's images folder".to_string()); }
+        let src = src_dir
+            .join(name)
+            .canonicalize()
+            .map_err(|_| format!("Image {} is missing. Your draft has been kept.", name))?;
+        if !src.starts_with(&src_dir) {
+            return Err("An image points outside the draft's images folder".to_string());
+        }
         sources.push((name, std::fs::read(src).map_err(|e| e.to_string())?));
     }
     storage::ensure_dir(&dst_dir.to_string_lossy())?;
@@ -187,19 +198,34 @@ fn rewrite_and_copy_assets(
     let mut copied = 0;
     for (name, bytes) in sources {
         let mut destination = dst_dir.join(name);
-        if destination.exists() && std::fs::read(&destination).map_err(|e| e.to_string())? != bytes {
-            let stem = Path::new(name).file_stem().unwrap_or_default().to_string_lossy();
-            let ext = Path::new(name).extension().unwrap_or_default().to_string_lossy();
+        if destination.exists() && std::fs::read(&destination).map_err(|e| e.to_string())? != bytes
+        {
+            let stem = Path::new(name)
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy();
+            let ext = Path::new(name)
+                .extension()
+                .unwrap_or_default()
+                .to_string_lossy();
             let mut suffix = 2;
             loop {
                 destination = dst_dir.join(format!("{}-{}.{}", stem, suffix, ext));
-                if !destination.exists() { break; }
+                if !destination.exists() {
+                    break;
+                }
                 suffix += 1;
             }
         }
-        if !destination.exists() { storage::atomic_write(&destination, &bytes, true)?; copied += 1; }
+        if !destination.exists() {
+            storage::atomic_write(&destination, &bytes, true)?;
+            copied += 1;
+        }
         let final_name = destination.file_name().unwrap().to_string_lossy();
-        rewritten = rewritten.replace(&format!(".assets/{}", name), &format!("assets/{}", final_name));
+        rewritten = rewritten.replace(
+            &format!(".assets/{}", name),
+            &format!("assets/{}", final_name),
+        );
     }
     Ok((rewritten, copied))
 }
@@ -486,7 +512,13 @@ mod tests {
         assert_eq!(parsed.scalar("type"), Some("riff"));
         assert_eq!(parsed.list("riffs-on"), vec!["[[Growth is death#^abc]]"]);
 
-        let draft = riff_frontmatter(&Connections { ship: false, ..Default::default() }, "2026-09-14");
+        let draft = riff_frontmatter(
+            &Connections {
+                ship: false,
+                ..Default::default()
+            },
+            "2026-09-14",
+        );
         assert_eq!(
             draft,
             "---\ntype: riff\nstatus:\n  - draft\ndate: 2026-09-14\ntopics: []\nriffs-on: []\nconversations: []\n---\n\n"
@@ -495,7 +527,10 @@ mod tests {
 
     #[test]
     fn spark_frontmatter_ships_with_the_minute() {
-        let c = Connections { links: vec!["[[Phil Stutz]]".into()], ..Default::default() };
+        let c = Connections {
+            links: vec!["[[Phil Stutz]]".into()],
+            ..Default::default()
+        };
         let fm = spark_frontmatter(&c, "2026-09-14 13:48");
         assert_eq!(
             fm,
@@ -578,9 +613,15 @@ mod tests {
         let vault = temp_dir("missing-vault");
         fs::create_dir_all(drafts.join(".assets")).unwrap();
         fs::write(drafts.join(".assets/valid.png"), b"image").unwrap();
-        assert!(rewrite_and_copy_assets("![](.assets/valid.png) ![](.assets/missing.png)", &drafts, &vault).is_err());
+        assert!(rewrite_and_copy_assets(
+            "![](.assets/valid.png) ![](.assets/missing.png)",
+            &drafts,
+            &vault
+        )
+        .is_err());
         assert!(!vault.join("assets/valid.png").exists());
-        let _ = fs::remove_dir_all(drafts); let _ = fs::remove_dir_all(vault);
+        let _ = fs::remove_dir_all(drafts);
+        let _ = fs::remove_dir_all(vault);
     }
 
     #[test]
@@ -593,8 +634,12 @@ mod tests {
         fs::write(vault.join("assets/pic.png"), b"existing image").unwrap();
         let (body, _) = rewrite_and_copy_assets("![](.assets/pic.png)", &drafts, &vault).unwrap();
         assert_eq!(body, "![](assets/pic-2.png)");
-        assert_eq!(fs::read(vault.join("assets/pic.png")).unwrap(), b"existing image");
-        let _ = fs::remove_dir_all(drafts); let _ = fs::remove_dir_all(vault);
+        assert_eq!(
+            fs::read(vault.join("assets/pic.png")).unwrap(),
+            b"existing image"
+        );
+        let _ = fs::remove_dir_all(drafts);
+        let _ = fs::remove_dir_all(vault);
     }
 
     #[test]
@@ -605,9 +650,9 @@ mod tests {
         fs::write(drafts.join("private.txt"), b"private").unwrap();
         assert!(rewrite_and_copy_assets("![](.assets/../private.txt)", &drafts, &vault).is_err());
         assert!(!vault.join("assets/private.txt").exists());
-        let _ = fs::remove_dir_all(drafts); let _ = fs::remove_dir_all(vault);
+        let _ = fs::remove_dir_all(drafts);
+        let _ = fs::remove_dir_all(vault);
     }
-
 
     #[test]
     fn a_spark_is_named_by_its_first_line_and_keeps_its_whole_text() {
@@ -621,8 +666,14 @@ mod tests {
         };
         let text = "The world feels so fucked because we've spent two centuries conceptualizing humans as machines.\n\nBut the future is one where humans are free to become more human.";
         let (path, name) = write_spark(&sparks, text, &c, "2026-09-14 13:48").unwrap();
-        assert_eq!(name, "The world feels so fucked because we've spent two centuries conceptualizing");
-        assert_eq!(path.file_name().unwrap().to_str().unwrap(), format!("{}.md", name));
+        assert_eq!(
+            name,
+            "The world feels so fucked because we've spent two centuries conceptualizing"
+        );
+        assert_eq!(
+            path.file_name().unwrap().to_str().unwrap(),
+            format!("{}.md", name)
+        );
         let written = fs::read_to_string(&path).unwrap();
         assert!(written.starts_with("---\ntype: spark\nstatus:\n  - shipped\ndate: 2026-09-14 13:48\nsparked-by: []\ntopics:\n  - intelligence\nconversations:\n  - Befriending technology\n---\n\nThe world feels"), "got: {written}");
         assert!(written.ends_with("more human.\n"));
