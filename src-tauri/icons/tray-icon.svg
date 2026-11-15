@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">
+<!-- Riff's menu bar glyph: the app icon's spark and line in one colour. macOS shows it
+     black or white to suit the menu bar. Rendered to tray-icon.png (44 x 44). -->
+<g transform="translate(2.25 8.29) scale(0.0737) translate(-234 -306)">
+  <path d="M352 590C418 590 438 408 518 408S590 652 660 652 708 520 744 520" fill="none" stroke="#000" stroke-width="54" stroke-linecap="round"/>
+  <path d="M318 306Q330 378 402 390Q330 402 318 474Q306 402 234 390Q306 378 318 306Z" fill="#000"/>
+</g>
+</svg>
