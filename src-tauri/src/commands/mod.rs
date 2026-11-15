@@ -2,6 +2,7 @@ pub mod connections;
 pub mod cursor_positions;
 pub mod file_watcher;
 pub mod frontmatter;
+pub mod handoff;
 pub mod index;
 pub mod notes;
 pub mod publish;

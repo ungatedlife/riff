@@ -1,3 +1,4 @@
+use crate::commands::connections::Quote;
 use crate::commands::site::SitePublishState;
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
@@ -24,6 +25,13 @@ pub struct AppState {
     /// One site publish at a time; a second request while one runs queues
     /// exactly one more.
     pub site_publish: Mutex<SitePublishState>,
+    /// Passages handed over by another app (Trove), keyed by the door they
+    /// are for ("spark" or "riff"), waiting for that door's window to take
+    /// them. See `commands/handoff.rs`.
+    pub pending_handoffs: Mutex<HashMap<String, Quote>>,
+    /// The door a `riff://` URL asked for before the windows existed (the
+    /// URL is what launched Riff). Shown as soon as the app is ready.
+    pub door_waiting: Mutex<Option<&'static str>>,
 }
 
 impl AppState {
@@ -36,6 +44,8 @@ impl AppState {
             flush_signal: Arc::new((Mutex::new(false), Condvar::new())),
             launch_at_login_item: Mutex::new(None),
             site_publish: Mutex::new(SitePublishState::default()),
+            pending_handoffs: Mutex::new(HashMap::new()),
+            door_waiting: Mutex::new(None),
         }
     }
 }

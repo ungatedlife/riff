@@ -9,8 +9,8 @@ mod windows;
 
 use commands::index::NoteIndex;
 use commands::{
-    connections, cursor_positions, file_watcher, index, notes, publish, quickies, settings, share,
-    site, storage, vault,
+    connections, cursor_positions, file_watcher, handoff, index, notes, publish, quickies,
+    settings, share, site, storage, vault,
 };
 use shortcuts::shortcut_to_string;
 use state::AppState;
@@ -117,6 +117,7 @@ fn main() {
             connections::get_connections,
             connections::save_connections,
             connections::remove_connections,
+            handoff::take_handoff,
             quickies::append_quickie,
             quickies::save_quickie_draft,
             quickies::get_quickie_draft,
@@ -227,6 +228,20 @@ fn main() {
             std::process::exit(1);
         })
         .run(|app, event| {
+            // Another app (Trove) opened `riff://spark?handoff=…` or
+            // `riff://riff?handoff=…`: a passage to respond to.
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Opened { urls } = &event {
+                for url in urls {
+                    handoff::open_url(app, url);
+                }
+            }
+            // If that URL is what launched Riff, it arrived before the
+            // windows existed. They do now, so its door can open.
+            if let RunEvent::Ready = &event {
+                handoff::show_waiting_door(app);
+            }
+
             // Quit (menu bar, ⌘Q) waits for the room to write its draft first.
             if let RunEvent::ExitRequested { api, code, .. } = event {
                 let already_flushing = {

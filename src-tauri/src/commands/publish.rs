@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use super::connections::{self, Connections};
+use super::connections::{self, Connections, Quote};
 use super::cursor_positions;
 use super::frontmatter::{yaml_list, yaml_scalar};
 use super::index::NoteIndex;
@@ -238,6 +238,28 @@ fn spark_frontmatter(c: &Connections, minute: &str) -> String {
     )
 }
 
+/// A spark with a passage attached reads like a quote tweet: his words,
+/// a blank line, then the passage under them.
+fn spark_body(words: &str, quote: Option<&Quote>) -> String {
+    let words = words.trim();
+    match quote {
+        Some(quote) if words.is_empty() => quote.block(),
+        Some(quote) => format!("{}\n\n{}", words, quote.block()),
+        None => words.to_string(),
+    }
+}
+
+/// A riff answers the passage, so the passage comes first: the quote, a
+/// blank line, then his words.
+fn riff_body(words: &str, quote: Option<&Quote>) -> String {
+    let words = words.trim_start_matches('\n');
+    match quote {
+        Some(quote) if words.trim().is_empty() => format!("{}\n", quote.block()),
+        Some(quote) => format!("{}\n\n{}", quote.block(), words),
+        None => words.to_string(),
+    }
+}
+
 /// Kick off the site publish for something that just shipped. Returns the
 /// reason it didn't, if it didn't.
 fn ship_to_site(app: &AppHandle, shipped: bool) -> Option<String> {
@@ -292,6 +314,9 @@ pub fn publish_riff(
         return Err("Nothing to publish".to_string());
     }
 
+    // The title, the file name and the word count come from his words
+    // alone. An attached passage only joins the body, below, once they are
+    // settled.
     let (title, body) = derive_title(&content);
     let filename = sanitize_filename(&title);
     let target = resolve_vault_path(&vault, &filename)?;
@@ -302,7 +327,7 @@ pub fn publish_riff(
     let final_content = format!(
         "{}{}",
         riff_frontmatter(&connections, &date),
-        rewritten.trim_start_matches('\n')
+        riff_body(&rewritten, connections.quote.as_ref())
     );
 
     storage::atomic_write(&target, final_content.as_bytes(), true)?;
@@ -351,7 +376,9 @@ pub struct SparkPublished {
 /// Write a spark note into the sparks folder. Returns the note's path and
 /// name. A spark IS its first line: the vault names the note by it, the
 /// body keeps the whole text (an opening `# heading` becomes the name and
-/// leaves the body, like a riff).
+/// leaves the body, like a riff). `text` is his words only: a passage
+/// attached to the spark rides in `connections` and goes under them, so it
+/// can never name the note or stand in for something to say.
 fn write_spark(
     sparks: &Path,
     text: &str,
@@ -368,7 +395,7 @@ fn write_spark(
     let final_content = format!(
         "{}{}\n",
         spark_frontmatter(connections, minute),
-        body.trim()
+        spark_body(&body, connections.quote.as_ref())
     );
     storage::atomic_write(&target, final_content.as_bytes(), true)?;
     Ok((target, name))
@@ -396,10 +423,10 @@ pub fn publish_spark(
 #[cfg(test)]
 mod tests {
     use super::{
-        count_words, derive_title, resolve_vault_path, rewrite_and_copy_assets, riff_frontmatter,
-        sanitize_filename, spark_frontmatter, write_spark,
+        count_words, derive_title, resolve_vault_path, rewrite_and_copy_assets, riff_body,
+        riff_frontmatter, sanitize_filename, spark_body, spark_frontmatter, write_spark,
     };
-    use crate::commands::connections::Connections;
+    use crate::commands::connections::{Connections, Quote};
     use crate::commands::frontmatter::parse;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -448,6 +475,7 @@ mod tests {
             topics: vec!["recovery".into(), "money".into()],
             links: vec!["[[Growth is death#^abc]]".into()],
             ship: true,
+            quote: None,
         };
         let fm = riff_frontmatter(&c, "2026-09-14");
         assert_eq!(
@@ -589,6 +617,7 @@ mod tests {
             topics: vec!["intelligence".into()],
             links: vec![],
             ship: true,
+            quote: None,
         };
         let text = "The world feels so fucked because we've spent two centuries conceptualizing humans as machines.\n\nBut the future is one where humans are free to become more human.";
         let (path, name) = write_spark(&sparks, text, &c, "2026-09-14 13:48").unwrap();
@@ -602,6 +631,130 @@ mod tests {
         let (second, _) = write_spark(&sparks, text, &c, "2026-09-14 13:49").unwrap();
         assert!(second.to_string_lossy().ends_with(" 2.md"));
         assert!(write_spark(&sparks, "\n\n", &c, "2026-09-14 13:50").is_err());
+        let _ = fs::remove_dir_all(&sparks);
+    }
+
+    // ── a passage handed over by another app (Trove) ──
+
+    fn buber() -> Quote {
+        Quote {
+            text: "All real living is meeting.\n\nSecond paragraph of the passage.".into(),
+            title: "I and Thou".into(),
+            author: "Martin Buber".into(),
+            page: "11".into(),
+            link: "I and Thou#^3fa9c2".into(),
+        }
+    }
+
+    const BUBER_BLOCK: &str = "> All real living is meeting.\n>\n> Second paragraph of the passage.\n>\n> — Martin Buber, [[I and Thou#^3fa9c2|I and Thou]], p. 11";
+
+    #[test]
+    fn a_spark_puts_the_quote_under_his_words() {
+        assert_eq!(
+            spark_body("Meeting is the whole thing.\n", Some(&buber())),
+            format!("Meeting is the whole thing.\n\n{}", BUBER_BLOCK)
+        );
+        // No quote: exactly what it was before.
+        assert_eq!(spark_body(" Just a thought.\n", None), "Just a thought.");
+    }
+
+    #[test]
+    fn a_riff_puts_the_quote_above_his_words() {
+        assert_eq!(
+            riff_body(
+                "\nMeeting is the whole thing.\n\nMore of it.\n",
+                Some(&buber())
+            ),
+            format!(
+                "{}\n\nMeeting is the whole thing.\n\nMore of it.\n",
+                BUBER_BLOCK
+            )
+        );
+        // No quote: exactly what it was before.
+        assert_eq!(riff_body("\nJust a thought.\n", None), "Just a thought.\n");
+    }
+
+    #[test]
+    fn a_riff_with_a_quote_is_still_named_by_his_words() {
+        // The same steps `publish_riff` takes: the title comes from the
+        // draft, and only then does the quote join the body.
+        let (title, body) = derive_title("# On meeting\n\nMeeting is the whole thing.");
+        assert_eq!(title, "On meeting");
+        assert_eq!(
+            riff_body(&body, Some(&buber())),
+            format!("{}\n\nMeeting is the whole thing.", BUBER_BLOCK)
+        );
+
+        let (title, _) = derive_title("Meeting is the whole thing.\n\nMore of it.");
+        assert_eq!(title, "Meeting is the whole thing.");
+    }
+
+    #[test]
+    fn a_spark_with_a_quote_is_named_by_his_words_and_links_the_source() {
+        let sparks = temp_dir("sparks-quote");
+        // What the spark window sends: the quote, and its link among the links.
+        let c = Connections {
+            links: vec!["[[I and Thou#^3fa9c2]]".into()],
+            quote: Some(buber()),
+            ..Default::default()
+        }
+        .normalized();
+        let (path, name) = write_spark(
+            &sparks,
+            "Meeting is the whole thing.",
+            &c,
+            "2026-11-15 09:30",
+        )
+        .unwrap();
+
+        assert_eq!(name, "Meeting is the whole thing.");
+        assert_eq!(
+            path.file_name().unwrap().to_str().unwrap(),
+            "Meeting is the whole thing.md"
+        );
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            format!(
+                "---\ntype: spark\nstatus:\n  - shipped\ndate: 2026-11-15 09:30\nsparked-by:\n  - \"[[I and Thou#^3fa9c2]]\"\ntopics: []\nconversations: []\n---\n\nMeeting is the whole thing.\n\n{}\n",
+                BUBER_BLOCK
+            )
+        );
+        let _ = fs::remove_dir_all(&sparks);
+    }
+
+    #[test]
+    fn a_quote_without_a_link_adds_nothing_to_the_front_matter() {
+        let sparks = temp_dir("sparks-no-link");
+        let c = Connections {
+            quote: Some(Quote {
+                link: String::new(),
+                ..buber()
+            }),
+            ..Default::default()
+        }
+        .normalized();
+        let (path, _) = write_spark(&sparks, "Meeting.", &c, "2026-11-15 09:30").unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+        assert!(written.contains("\nsparked-by: []\n"), "got: {written}");
+        assert!(
+            written.ends_with("> — Martin Buber, I and Thou, p. 11\n"),
+            "got: {written}"
+        );
+        let _ = fs::remove_dir_all(&sparks);
+    }
+
+    #[test]
+    fn a_quote_alone_is_not_a_spark() {
+        let sparks = temp_dir("sparks-quote-only");
+        let c = Connections {
+            quote: Some(buber()),
+            ..Default::default()
+        }
+        .normalized();
+        assert!(write_spark(&sparks, "", &c, "2026-11-15 09:30").is_err());
+        assert!(write_spark(&sparks, "\n  \n", &c, "2026-11-15 09:30").is_err());
+        // Nothing was written.
+        assert_eq!(fs::read_dir(&sparks).map(|d| d.count()).unwrap_or(0), 0);
         let _ = fs::remove_dir_all(&sparks);
     }
 }
