@@ -5,6 +5,7 @@ import DraftShelf from './components/desk/DraftShelf';
 import Preferences from './components/desk/Preferences';
 import Paper from './components/desk/Paper';
 
+/** One page, four windows: the three doors and the satellites (settings, drafts). */
 export default function App() {
   const type = new URLSearchParams(window.location.search).get('window');
   const close = () => { void invoke('hide_window'); };
@@ -19,5 +20,7 @@ export default function App() {
   }, [type]);
   if (type === 'settings') return <main className="satellite-window"><Paper/><Preferences onClose={close}/></main>;
   if (['command-palette', 'search', 'manager'].includes(type || '')) return <main className="satellite-window"><Paper/><DraftShelf onClose={close} onOpen={async path => { await invoke('open_draft', { path }); close(); }}/></main>;
-  return <CaptureDesk quick={type === 'quickie'}/>;
+  if (type === 'quickie') return <CaptureDesk kind="quickie"/>;
+  if (type === 'spark') return <CaptureDesk kind="spark"/>;
+  return <CaptureDesk kind="riff"/>;
 }

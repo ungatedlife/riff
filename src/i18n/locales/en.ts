@@ -386,6 +386,7 @@ export const en = {
   "settings.quickiesFile.describe":
     "Every quickie is appended to this one running note with a timestamp. Leave it unset to use Quickies.md at the top of your vault.",
   "shortcut.summon": "New riff",
+  "shortcut.spark": "New spark",
   "shortcut.quickie": "New quickie",
   "shortcut.search": "Drafts",
   "shortcut.manager": "Command Palette (alt)",

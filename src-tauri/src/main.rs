@@ -9,15 +9,15 @@ mod windows;
 
 use commands::index::NoteIndex;
 use commands::{
-    cursor_positions, file_watcher, index, notes, publish, quickies, settings, share, storage,
-    vault,
+    connections, cursor_positions, file_watcher, index, notes, publish, quickies, settings, share,
+    site, storage, vault,
 };
 use shortcuts::shortcut_to_string;
 use state::AppState;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, EventTarget, Manager, RunEvent};
 use tauri_plugin_global_shortcut::ShortcutState;
-use windows::{show_main, show_quickie};
+use windows::{show_main, show_quickie, show_spark};
 
 /// How long an exit waits for the room to finish writing its draft. The
 /// save itself takes a few milliseconds; the timeout only matters if the
@@ -52,8 +52,8 @@ fn main() {
                         return;
                     }
 
-                    // Only the two capture surfaces are reachable from other
-                    // apps; everything else is handled inside Riff's windows.
+                    // Only the three doors are reachable from other apps;
+                    // everything else is handled inside Riff's windows.
                     {
                         let state = app.state::<AppState>();
                         let action_map = state
@@ -67,6 +67,10 @@ fn main() {
                         match action.as_deref() {
                             Some("summon") => {
                                 show_main(app);
+                                return;
+                            }
+                            Some("spark") => {
+                                show_spark(app, None);
                                 return;
                             }
                             Some("quickie") => {
@@ -92,6 +96,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -107,11 +112,19 @@ fn main() {
             notes::save_note_image_from_path,
             storage::get_drafts_directory,
             publish::publish_riff,
+            publish::publish_spark,
+            site::publish_site,
+            connections::get_connections,
+            connections::save_connections,
+            connections::remove_connections,
             quickies::append_quickie,
             quickies::save_quickie_draft,
             quickies::get_quickie_draft,
+            quickies::save_spark_draft,
+            quickies::get_spark_draft,
             vault::search_vault_links,
             vault::open_vault_note,
+            vault::vault_vocabulary,
             index::rebuild_index,
             settings::get_settings,
             settings::save_settings,
@@ -123,6 +136,7 @@ fn main() {
             windows::open_command_palette,
             windows::open_settings,
             windows::open_quickie,
+            windows::open_spark,
             windows::reopen_last_note,
             windows::focused_riff_window,
             windows::flush_complete,
@@ -173,9 +187,25 @@ fn main() {
             // Every window hides instead of closing.
             windows::install_close_guards(app.handle());
 
+            // Debug builds can be launched straight into a door for
+            // verification: `Riff.app --open=spark|quickie|main` (the
+            // isolated test build has no hotkeys to summon them with).
+            #[cfg(debug_assertions)]
+            if let Some(door) = std::env::args().find_map(|a| a.strip_prefix("--open=").map(String::from)) {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(800));
+                    match door.as_str() {
+                        "spark" => show_spark(&handle, None),
+                        "quickie" => show_quickie(&handle),
+                        _ => show_main(&handle),
+                    }
+                });
+            }
+
             // Capture surfaces emit a blur event so the frontend can decide
             // whether to tuck themselves away.
-            for label in [windows::MAIN, windows::QUICKIE] {
+            for label in [windows::MAIN, windows::QUICKIE, windows::SPARK] {
                 if let Some(window) = app.get_webview_window(label) {
                     let w = window.clone();
                     let event_name = format!("{}-blur", label);

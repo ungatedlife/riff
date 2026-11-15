@@ -1,24 +1,34 @@
-/// The publish ritual: stamp a finished riff with frontmatter and move it —
-/// images included — from the drafts folder into the configured vault folder.
-use chrono::{Local, SecondsFormat};
+/// The publish ritual: stamp a finished riff with the vault's own front
+/// matter and move it — images included — from the drafts folder into the
+/// configured vault folder. Sparks skip the drafts folder entirely: a line
+/// or three, written straight into `Sparks/`, shipped.
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use super::connections::{self, Connections};
 use super::cursor_positions;
+use super::frontmatter::{yaml_list, yaml_scalar};
 use super::index::NoteIndex;
 use super::notes;
 use super::settings;
+use super::site;
 use super::storage::{self, notes_root};
+use super::vault;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PublishedInfo {
     pub vault_path: String,
     pub title: String,
-    pub slug: String,
     pub word_count: usize,
     pub assets_copied: usize,
+    /// `shipped` or `draft` — what the note's status says.
+    pub status: String,
+    /// Why the site publish didn't start, if it didn't (no site folder,
+    /// turned off, or the piece stayed a draft). None = it's running.
+    pub site_publish_skipped: Option<String>,
 }
 
 /// Strip block and inline markdown markers from a title candidate line.
@@ -127,31 +137,6 @@ fn sanitize_filename(title: &str) -> String {
     }
 }
 
-fn slugify(title: &str) -> String {
-    let mut slug = String::new();
-    let mut prev_dash = true; // suppress a leading dash
-    for c in title.chars() {
-        if c.is_alphanumeric() {
-            for lc in c.to_lowercase() {
-                slug.push(lc);
-            }
-            prev_dash = false;
-        } else if !prev_dash {
-            slug.push('-');
-            prev_dash = true;
-        }
-        if slug.len() >= 60 {
-            break;
-        }
-    }
-    let slug = slug.trim_matches('-').to_string();
-    if slug.is_empty() {
-        "riff".to_string()
-    } else {
-        slug
-    }
-}
-
 /// First free `<name>.md`, `<name> 2.md`, … `<name> 99.md` in the vault
 /// (space-number, the way Obsidian dedupes duplicate note names).
 fn resolve_vault_path(vault: &Path, name: &str) -> Result<PathBuf, String> {
@@ -219,14 +204,51 @@ fn rewrite_and_copy_assets(
     Ok((rewritten, copied))
 }
 
-/// Title, a URL-safe slug for the site pipeline, and the publish date.
-fn frontmatter(title: &str, slug: &str) -> String {
-    let escaped = title.replace('\\', "\\\\").replace('"', "\\\"");
-    let date = Local::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+fn status_word(ship: bool) -> &'static str {
+    if ship {
+        "shipped"
+    } else {
+        "draft"
+    }
+}
+
+/// Exactly the vault's `Templates/Riff.md`, filled in. The note's name is
+/// its title (Obsidian's rule, and the site's), so no `title:` line.
+fn riff_frontmatter(c: &Connections, date: &str) -> String {
     format!(
-        "---\ntitle: \"{}\"\nslug: {}\ndate: {}\n---\n\n",
-        escaped, slug, date
+        "---\ntype: riff\n{}{}{}{}{}---\n\n",
+        yaml_list("status", &[status_word(c.ship).to_string()]),
+        yaml_scalar("date", date),
+        yaml_list("topics", &c.topics),
+        yaml_list("riffs-on", &c.links),
+        yaml_list("conversations", &c.conversations),
     )
+}
+
+/// Exactly the vault's `Templates/Spark.md`: shipped by default, stamped
+/// with the minute it struck.
+fn spark_frontmatter(c: &Connections, minute: &str) -> String {
+    format!(
+        "---\ntype: spark\n{}{}{}{}{}---\n\n",
+        yaml_list("status", &["shipped".to_string()]),
+        yaml_scalar("date", minute),
+        yaml_list("sparked-by", &c.links),
+        yaml_list("topics", &c.topics),
+        yaml_list("conversations", &c.conversations),
+    )
+}
+
+/// Kick off the site publish for something that just shipped. Returns the
+/// reason it didn't, if it didn't.
+fn ship_to_site(app: &AppHandle, shipped: bool) -> Option<String> {
+    if !shipped {
+        return Some("Kept as a draft in the vault.".to_string());
+    }
+    match settings::load_settings_from_file() {
+        Ok(s) if !s.auto_publish_site => Some("Site publishing is off in Settings.".to_string()),
+        Ok(_) => site::request_site_publish(app).err(),
+        Err(e) => Some(e),
+    }
 }
 
 /// Words as the room counts them: tokens with at least one letter or digit,
@@ -241,8 +263,10 @@ fn count_words(body: &str) -> usize {
 pub fn publish_riff(
     app: AppHandle,
     path: String,
+    connections: Option<Connections>,
     index: State<'_, NoteIndex>,
 ) -> Result<PublishedInfo, String> {
+    let connections = connections.unwrap_or_default().normalized();
     let settings = settings::load_settings_from_file()?;
     let vault_dir = settings
         .vault_dir
@@ -269,27 +293,28 @@ pub fn publish_riff(
     }
 
     let (title, body) = derive_title(&content);
-    let slug = slugify(&title);
     let filename = sanitize_filename(&title);
     let target = resolve_vault_path(&vault, &filename)?;
     let (rewritten, assets_copied) = rewrite_and_copy_assets(&body, &root, &vault)?;
 
     let word_count = count_words(&rewritten);
+    let date = Local::now().format("%Y-%m-%d").to_string();
     let final_content = format!(
         "{}{}",
-        frontmatter(&title, &slug),
+        riff_frontmatter(&connections, &date),
         rewritten.trim_start_matches('\n')
     );
 
     storage::atomic_write(&target, final_content.as_bytes(), true)?;
 
     // The riff has left the drafts folder: remove the draft, its assets,
-    // its index entry, and its cursor position.
+    // its index entry, its cursor position, and its connections.
     // Keep source images. Other unfinished riffs may reference the same files.
     // A future explicit cleanup can collect unreferenced assets safely.
     let _ = storage::delete_file(&path);
     index.remove(&path);
     let _ = cursor_positions::remove_cursor_position(path.clone());
+    let _ = connections::remove_connections(path.clone());
 
     {
         let state = app.state::<AppState>();
@@ -303,22 +328,79 @@ pub fn publish_riff(
     }
 
     let _ = app.emit("files-changed", vec![path.clone()]);
+    let site_publish_skipped = ship_to_site(&app, connections.ship);
 
     Ok(PublishedInfo {
         vault_path: target.to_string_lossy().to_string(),
         title,
-        slug,
         word_count,
         assets_copied,
+        status: status_word(connections.ship).to_string(),
+        site_publish_skipped,
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SparkPublished {
+    pub vault_path: String,
+    /// The note's name — the spark's first line, as the vault names it.
+    pub name: String,
+    pub site_publish_skipped: Option<String>,
+}
+
+/// Write a spark note into the sparks folder. Returns the note's path and
+/// name. A spark IS its first line: the vault names the note by it, the
+/// body keeps the whole text (an opening `# heading` becomes the name and
+/// leaves the body, like a riff).
+fn write_spark(
+    sparks: &Path,
+    text: &str,
+    connections: &Connections,
+    minute: &str,
+) -> Result<(PathBuf, String), String> {
+    if notes::is_effectively_empty_markdown(text) {
+        return Err("Nothing to spark".to_string());
+    }
+    storage::ensure_dir(&sparks.to_string_lossy())?;
+    let (name, body) = derive_title(text);
+    let filename = sanitize_filename(&name);
+    let target = resolve_vault_path(sparks, &filename)?;
+    let final_content = format!(
+        "{}{}\n",
+        spark_frontmatter(connections, minute),
+        body.trim()
+    );
+    storage::atomic_write(&target, final_content.as_bytes(), true)?;
+    Ok((target, name))
+}
+
+/// Lands in `Sparks/` shipped, with the minute, then publishes the site.
+#[tauri::command]
+pub fn publish_spark(
+    app: AppHandle,
+    text: String,
+    connections: Option<Connections>,
+) -> Result<SparkPublished, String> {
+    let connections = connections.unwrap_or_default().normalized();
+    let sparks = vault::sparks_dir_from_settings()?;
+    let minute = Local::now().format("%Y-%m-%d %H:%M").to_string();
+    let (target, name) = write_spark(&sparks, &text, &connections, &minute)?;
+    let site_publish_skipped = ship_to_site(&app, true);
+    Ok(SparkPublished {
+        vault_path: target.to_string_lossy().to_string(),
+        name,
+        site_publish_skipped,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        count_words, derive_title, frontmatter, resolve_vault_path, rewrite_and_copy_assets,
-        sanitize_filename, slugify,
+        count_words, derive_title, resolve_vault_path, rewrite_and_copy_assets, riff_frontmatter,
+        sanitize_filename, spark_frontmatter, write_spark,
     };
+    use crate::commands::connections::Connections;
+    use crate::commands::frontmatter::parse;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -360,21 +442,37 @@ mod tests {
     }
 
     #[test]
-    fn slugify_joins_alphanumeric_runs() {
+    fn riff_frontmatter_matches_the_vault_template() {
+        let c = Connections {
+            conversations: vec!["Ember 2026".into()],
+            topics: vec!["recovery".into(), "money".into()],
+            links: vec!["[[Growth is death#^abc]]".into()],
+            ship: true,
+        };
+        let fm = riff_frontmatter(&c, "2026-09-14");
         assert_eq!(
-            slugify("On riffs, & conversation!"),
-            "on-riffs-conversation"
+            fm,
+            "---\ntype: riff\nstatus:\n  - shipped\ndate: 2026-09-14\ntopics:\n  - recovery\n  - money\nriffs-on:\n  - \"[[Growth is death#^abc]]\"\nconversations:\n  - Ember 2026\n---\n\n"
         );
-        assert_eq!(slugify("???"), "riff");
+        let (parsed, _) = parse(&fm).unwrap();
+        assert_eq!(parsed.scalar("type"), Some("riff"));
+        assert_eq!(parsed.list("riffs-on"), vec!["[[Growth is death#^abc]]"]);
+
+        let draft = riff_frontmatter(&Connections { ship: false, ..Default::default() }, "2026-09-14");
+        assert_eq!(
+            draft,
+            "---\ntype: riff\nstatus:\n  - draft\ndate: 2026-09-14\ntopics: []\nriffs-on: []\nconversations: []\n---\n\n"
+        );
     }
 
     #[test]
-    fn frontmatter_escapes_quotes_and_carries_the_slug() {
-        let fm = frontmatter(r#"A "quoted" title"#, "a-quoted-title");
-        assert!(
-            fm.starts_with("---\ntitle: \"A \\\"quoted\\\" title\"\nslug: a-quoted-title\ndate: ")
+    fn spark_frontmatter_ships_with_the_minute() {
+        let c = Connections { links: vec!["[[Phil Stutz]]".into()], ..Default::default() };
+        let fm = spark_frontmatter(&c, "2026-09-14 13:48");
+        assert_eq!(
+            fm,
+            "---\ntype: spark\nstatus:\n  - shipped\ndate: 2026-09-14 13:48\nsparked-by:\n  - \"[[Phil Stutz]]\"\ntopics: []\nconversations: []\n---\n\n"
         );
-        assert!(fm.ends_with("---\n\n"));
     }
 
     #[test]
@@ -482,4 +580,28 @@ mod tests {
         let _ = fs::remove_dir_all(drafts); let _ = fs::remove_dir_all(vault);
     }
 
+
+    #[test]
+    fn a_spark_is_named_by_its_first_line_and_keeps_its_whole_text() {
+        let sparks = temp_dir("sparks");
+        let c = Connections {
+            conversations: vec!["Befriending technology".into()],
+            topics: vec!["intelligence".into()],
+            links: vec![],
+            ship: true,
+        };
+        let text = "The world feels so fucked because we've spent two centuries conceptualizing humans as machines.\n\nBut the future is one where humans are free to become more human.";
+        let (path, name) = write_spark(&sparks, text, &c, "2026-09-14 13:48").unwrap();
+        assert_eq!(name, "The world feels so fucked because we've spent two centuries conceptualizing");
+        assert_eq!(path.file_name().unwrap().to_str().unwrap(), format!("{}.md", name));
+        let written = fs::read_to_string(&path).unwrap();
+        assert!(written.starts_with("---\ntype: spark\nstatus:\n  - shipped\ndate: 2026-09-14 13:48\nsparked-by: []\ntopics:\n  - intelligence\nconversations:\n  - Befriending technology\n---\n\nThe world feels"), "got: {written}");
+        assert!(written.ends_with("more human.\n"));
+
+        // Same first line again → Obsidian-style " 2" suffix, nothing overwritten.
+        let (second, _) = write_spark(&sparks, text, &c, "2026-09-14 13:49").unwrap();
+        assert!(second.to_string_lossy().ends_with(" 2.md"));
+        assert!(write_spark(&sparks, "\n\n", &c, "2026-09-14 13:50").is_err());
+        let _ = fs::remove_dir_all(&sparks);
+    }
 }

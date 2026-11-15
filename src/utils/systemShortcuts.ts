@@ -1,7 +1,7 @@
 import type { TranslationKey } from "@/i18n";
 
-/// Hotkeys that reach Riff from any app: the two capture surfaces.
-export const GLOBAL_SHORTCUT_ACTIONS = ["summon", "quickie"] as const;
+/// Hotkeys that reach Riff from any app: the three doors.
+export const GLOBAL_SHORTCUT_ACTIONS = ["summon", "spark", "quickie"] as const;
 /// Shortcuts that only work while Riff itself is active.
 export const LOCAL_SHORTCUT_ACTIONS = ["search", "last_note", "zen_mode"] as const;
 export const SYSTEM_SHORTCUT_ACTIONS = [
@@ -14,8 +14,9 @@ export type SystemAction = (typeof SYSTEM_SHORTCUT_ACTIONS)[number];
 export const SETTINGS_SHORTCUT = "Cmd+Comma";
 
 export const SYSTEM_SHORTCUT_DEFAULTS: Record<SystemAction, string> = {
-  // Hyper (Cmd+Ctrl+Alt+Shift) + R/Q — pairs with a Caps Lock hyper key.
+  // Hyper (Cmd+Ctrl+Alt+Shift) + R/S/Q — pairs with a Caps Lock hyper key.
   summon: "Cmd+Ctrl+Alt+Shift+R",
+  spark: "Cmd+Ctrl+Alt+Shift+S",
   quickie: "Cmd+Ctrl+Alt+Shift+Q",
   search: "Cmd+Shift+P",
   last_note: "Cmd+Shift+L",
@@ -24,6 +25,7 @@ export const SYSTEM_SHORTCUT_DEFAULTS: Record<SystemAction, string> = {
 
 export const SYSTEM_SHORTCUT_LABEL_KEYS: Record<SystemAction, TranslationKey> = {
   summon: "shortcut.summon",
+  spark: "shortcut.spark",
   quickie: "shortcut.quickie",
   search: "shortcut.search",
   last_note: "shortcut.lastNote",

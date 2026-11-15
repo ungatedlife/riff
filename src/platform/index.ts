@@ -8,7 +8,7 @@ export const isNative = isTauri();
 const bus: EventTarget = import.meta.hot?.data.bus ?? new EventTarget();
 if (import.meta.hot) import.meta.hot.data.bus = bus;
 const key = 'riff:browser-preview:v1';
-type PreviewStore = { settings: RiffSettings; notes: NoteInfo[]; quickies: string; sent: NoteInfo[]; quickieDraft?: string };
+type PreviewStore = { settings: RiffSettings; notes: NoteInfo[]; quickies: string; sent: NoteInfo[]; quickieDraft?: string; sparkDraft?: string; sparks?: { name: string; text: string }[]; connections?: Record<string, unknown> };
 const defaults: PreviewStore = {
   settings: { theme_mode: 'dark', active_theme: 'dark', font_size: 21, text_direction: 'auto', hide_dock_icon: true, hide_tray_icon: false, launch_at_login: true, custom_themes: [], system_shortcuts: SYSTEM_SHORTCUT_DEFAULTS },
   notes: [], quickies: '', sent: [],
@@ -48,7 +48,28 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     case 'get_drafts_directory': result = 'Browser preview'; break;
     case 'list_notes': result = data.notes; break;
     case 'search_notes': result = data.notes.filter(n => n.content.toLowerCase().includes(String(args.query ?? '').toLowerCase())).map(n => ({ ...n, title: titleOf(n.content), snippet: n.content })); break;
-    case 'search_vault_links': result = []; break;
+    case 'search_vault_links': {
+      const q = String(args.query ?? '').toLowerCase();
+      const names = ['Phil Stutz', 'Growth is death', 'I riff, therefore I am', 'Tiny habits, humble beginnings', 'Francis Weller', 'The Tools'];
+      result = names.filter(n => !q || n.toLowerCase().includes(q)).map(n => ({ name: n, path: `preview/${n}.md`, modified: 0 })); break;
+    }
+    case 'vault_vocabulary': result = {
+      conversations: [{ name: 'Ember 2026', count: 45, hub: true }, { name: 'Befriending commitment', count: 22, hub: true }, { name: 'Befriending shame', count: 8, hub: true }, { name: 'The Girl', count: 8, hub: true }, { name: 'Befriending technology', count: 1, hub: true }, { name: 'Building Dialogic', count: 1, hub: true }, { name: 'Start Close In', count: 2, hub: true }],
+      topics: [{ name: 'recovery', count: 37, hub: false }, { name: 'humanity', count: 23, hub: false }, { name: 'creativity', count: 18, hub: false }, { name: 'spirituality', count: 17, hub: false }, { name: 'entrepreneurship', count: 14, hub: false }, { name: 'perfectionism', count: 13, hub: false }, { name: 'money', count: 13, hub: false }, { name: 'conversation', count: 13, hub: false }, { name: 'community', count: 12, hub: false }, { name: 'ai', count: 10, hub: false }],
+    }; break;
+    case 'get_connections': result = data.connections?.[String(args.id)] ?? null; break;
+    case 'save_connections': data.connections = { ...(data.connections ?? {}), [String(args.id)]: args.connections }; write(data); break;
+    case 'remove_connections': if (data.connections) { delete data.connections[String(args.id)]; write(data); } break;
+    case 'get_spark_draft': result = data.sparkDraft || ''; break;
+    case 'save_spark_draft': data.sparkDraft = content; write(data); result = { path: 'preview/spark-draft.md' }; break;
+    case 'publish_spark': {
+      const text = String(args.text ?? '');
+      const name = titleOf(text);
+      data.sparks = [{ name, text }, ...(data.sparks ?? [])]; write(data);
+      result = { vault_path: `Sparks/${name}.md`, name, site_publish_skipped: 'Browser preview: the site publish runs in the Mac app.' }; break;
+    }
+    case 'publish_site': await emit('site-publish', { phase: 'failed', detail: 'Browser preview: the site publish runs in the Mac app.' }); break;
+    case 'open_spark': await emit('show-spark', { text: args.text ?? '' }); break;
     case 'get_cursor_position': result = null; break;
     case 'save_note': {
       const filename = `${titleOf(content)}.md`;
@@ -75,7 +96,8 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
       const note = data.notes.find(n => n.path === path);
       if (!note) throw new Error('Draft not found');
       data.sent.unshift(note); data.notes = data.notes.filter(n => n.path !== path); write(data);
-      result = { title: titleOf(note.content), vault_path: note.filename, word_count: note.content.split(/\s+/).length };
+      const conn = args.connections as { ship?: boolean } | undefined;
+      result = { title: titleOf(note.content), vault_path: note.filename, word_count: note.content.split(/\s+/).length, status: conn?.ship === false ? 'draft' : 'shipped', site_publish_skipped: conn?.ship === false ? 'Kept as a draft in the vault.' : 'Browser preview: the site publish runs in the Mac app.' };
       await emit('files-changed'); break;
     }
     case 'get_quickie_draft': result = data.quickieDraft || ''; break;

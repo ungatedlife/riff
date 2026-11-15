@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 pub const MAIN: &str = "main";
 pub const QUICKIE: &str = "quickie";
+pub const SPARK: &str = "spark";
 pub const SETTINGS: &str = "settings";
 pub const PALETTE: &str = "command-palette";
 
@@ -159,6 +160,20 @@ pub fn show_quickie(app: &AppHandle) {
     }
 }
 
+/// Summon the spark window: a line or three that ships the moment ⌘↵ lands.
+/// Optional text pre-fills it (a quickie promoted to a spark).
+pub fn show_spark(app: &AppHandle, text: Option<String>) {
+    if let Some(window) = app.get_webview_window(SPARK) {
+        let _ = window.center();
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.emit("spark-summoned", ());
+        if let Some(text) = text.filter(|t| !t.trim().is_empty()) {
+            let _ = window.emit("spark-prefill", serde_json::json!({ "text": text }));
+        }
+    }
+}
+
 /// Hide any Riff window. The room also leaves fullscreen; every other
 /// window hands focus back to the room if it's still up.
 pub fn hide_by_label(app: &AppHandle, label: &str) {
@@ -264,6 +279,11 @@ pub fn open_command_palette(app: AppHandle) -> Result<bool, String> {
 #[tauri::command]
 pub fn open_quickie(app: AppHandle) {
     show_quickie(&app);
+}
+
+#[tauri::command]
+pub fn open_spark(app: AppHandle, text: Option<String>) {
+    show_spark(&app, text);
 }
 
 #[tauri::command]

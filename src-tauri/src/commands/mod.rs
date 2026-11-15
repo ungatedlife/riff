@@ -1,11 +1,14 @@
+pub mod connections;
 pub mod cursor_positions;
 pub mod file_watcher;
+pub mod frontmatter;
 pub mod index;
 pub mod notes;
 pub mod publish;
 pub mod quickies;
 pub mod settings;
 pub mod share;
+pub mod site;
 pub mod storage;
 pub mod vault;
 pub mod versioning;

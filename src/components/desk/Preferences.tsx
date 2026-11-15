@@ -36,6 +36,16 @@ export default function Preferences({ onClose, initialTab = 'Writing' }: { onClo
     try { const path = await open({ directory: true, multiple: false, title: 'Where should your riffs land?' }); if (typeof path === 'string') await change({ vault_dir: path }); }
     catch (e) { setError(String(e)); }
   };
+  const chooseSparks = async () => {
+    if (!isNative) return;
+    try { const path = await open({ directory: true, multiple: false, title: 'Where should sparks land?', defaultPath: settings?.sparks_dir || settings?.vault_dir || undefined }); if (typeof path === 'string') await change({ sparks_dir: path }); }
+    catch (e) { setError(String(e)); }
+  };
+  const chooseSite = async () => {
+    if (!isNative) return;
+    try { const path = await open({ directory: true, multiple: false, title: 'The website repo (where Publish.command lives)', defaultPath: settings?.site_dir || undefined }); if (typeof path === 'string') await change({ site_dir: path }); }
+    catch (e) { setError(String(e)); }
+  };
   const chooseQuickies = async () => {
     if (!isNative) return;
     try { const path = await save({ title: 'Your running quickies note', defaultPath: settings?.quickies_file || 'Quickies.md', filters: [{ name: 'Markdown', extensions: ['md'] }] }); if (path) await change({ quickies_file: path }); }
@@ -55,18 +65,22 @@ export default function Preferences({ onClose, initialTab = 'Writing' }: { onClo
         <div className="setting-row"><label htmlFor="direction">Text direction</label><select id="direction" value={settings.text_direction} disabled={saving} onChange={e => void change({ text_direction: e.target.value })}><option value="auto">Automatic</option><option value="ltr">Left to right</option><option value="rtl">Right to left</option></select></div>
       </>}
       {tab === 'Files' && <>
-        <div className="file-setting"><Icon name="vault" size={26}/><h3>A home for your thoughts.</h3><p>Choose a folder inside your Obsidian vault. Finished riffs arrive as Markdown notes, ready for whatever comes next.</p><button className="primary-button" disabled={saving} onClick={() => void chooseFolder()}>{settings.vault_dir ? 'Change vault folder' : 'Choose vault folder'}<Icon name="arrow"/></button><p className="file-path">{settings.vault_dir || 'Your drafts save locally while you decide.'}</p></div>
+        <div className="setting-row"><div><span>Riffs</span><p>{settings.vault_dir || 'The Riffs folder inside your Obsidian vault.'}</p></div><button className="text-button" disabled={saving} onClick={() => void chooseFolder()}>{settings.vault_dir ? 'Change' : 'Choose'}</button></div>
+        <div className="setting-row"><div><span>Sparks</span><p>{settings.sparks_dir || 'Sparks, next to Riffs in the vault.'}</p></div><button className="text-button" disabled={!isNative || saving} onClick={() => void chooseSparks()}>{settings.sparks_dir ? 'Change' : 'Choose'}</button></div>
         <div className="setting-row"><div><span>Quickies</span><p>{settings.quickies_file || 'One running Quickies.md note in your vault.'}</p></div><button className="text-button" disabled={!isNative || saving} onClick={() => void chooseQuickies()}>Choose note</button></div>
         <div className="setting-row"><div><span>Unfinished riffs</span><p>{settings.drafts_dir || '~/Documents/Riff'}</p></div><span className="small-label">Saved as you write</span></div>
-        <p className="quiet-note">Sending a riff writes to your vault. Your website’s publishing workflow decides what becomes public.</p>
+        <div className="setting-row"><div><span>The site</span><p>{settings.site_dir || 'The website repo, where Publish.command lives.'}</p></div><button className="text-button" disabled={!isNative || saving} onClick={() => void chooseSite()}>{settings.site_dir ? 'Change' : 'Choose'}</button></div>
+        <label className="setting-row"><div><span>Publish the site when something ships</span><p>Runs Publish.command in the background. A spark is live about a minute after ⌘↵.</p></div><input type="checkbox" disabled={saving} checked={settings.auto_publish_site !== false} onChange={e => void change({ auto_publish_site: e.target.checked })}/></label>
       </>}
       {tab === 'Keys' && <>
-        <p className="quiet-note">The two summon keys work from anywhere on your Mac.</p>
-        {Object.entries(SYSTEM_SHORTCUT_DEFAULTS).map(([id, fallback]) => <div className="setting-row" key={id}><span>{({ summon: 'Open riff', quickie: 'Open quickie', search: 'Unfinished thoughts', last_note: 'Last draft', zen_mode: 'Focus view' } as Record<string,string>)[id]}</span><ShortcutRecorder value={settings.system_shortcuts[id] || fallback} existingShortcuts={Object.entries(settings.system_shortcuts).filter(([k]) => k !== id).map(([,v]) => v)} reservedShortcuts={['Cmd+Enter', 'Cmd+N', 'Cmd+Comma', 'Cmd+K']} onChange={value => void change({ system_shortcuts: { ...settings.system_shortcuts, [id]: value } })}/></div>)}
-        <div className="setting-row"><span>Send to vault</span><kbd>⌘↵</kbd></div><div className="setting-row"><span>Save and tuck away</span><kbd>esc</kbd></div>
+        <p className="quiet-note">The three doors open from anywhere on your Mac. The rest work while Riff is up.</p>
+        {Object.entries(SYSTEM_SHORTCUT_DEFAULTS).map(([id, fallback]) => <div className="setting-row" key={id}><span>{({ summon: 'Riff', spark: 'Spark', quickie: 'Quickie', search: 'Drafts', last_note: 'Last draft', zen_mode: 'Focus' } as Record<string,string>)[id]}</span><ShortcutRecorder value={settings.system_shortcuts[id] || fallback} existingShortcuts={Object.entries(settings.system_shortcuts).filter(([k]) => k !== id).map(([,v]) => v)} reservedShortcuts={['Cmd+Enter', 'Cmd+N', 'Cmd+Comma', 'Cmd+K', 'Cmd+1', 'Cmd+2', 'Cmd+3']} onChange={value => void change({ system_shortcuts: { ...settings.system_shortcuts, [id]: value } })}/></div>)}
+        <div className="setting-row"><span>Send</span><kbd>⌘↵</kbd></div>
+        <div className="setting-row"><span>Conversation · topic · what it builds on</span><kbd>⌘1 ⌘2 ⌘3</kbd></div>
+        <div className="setting-row"><span>Set aside</span><kbd>esc</kbd></div>
         <label className="setting-row"><span>Ready when I log in</span><input type="checkbox" disabled={saving} checked={settings.launch_at_login} onChange={e => void change({ launch_at_login: e.target.checked })}/></label>
       </>}
     </div>}
-    <footer className="preferences-footer"><span>riff <span className="tiny-star">✳</span> a Rob app</span><span role="status">{saving ? 'Saving…' : 'Saved automatically'}</span></footer>
+    <footer className="preferences-footer"><span>riff</span><span role="status">{saving ? 'Saving…' : 'Saved automatically'}</span></footer>
   </section>;
 }

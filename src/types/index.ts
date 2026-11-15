@@ -48,7 +48,35 @@ export interface RiffSettings {
   font_family?: string | null; // null = app default (bundled iA Writer Duo S)
   window_opacity?: number; // 0.2–1.0, default 1.0
   custom_fonts?: CustomFontEntry[];
+  /** Vault folder sparks land in. Empty = `<vault root>/Sparks`. */
+  sparks_dir?: string | null;
+  /** The website repo — `Publish.command` lives there. */
+  site_dir?: string | null;
+  /** Run the site's publish after anything ships from Riff. */
+  auto_publish_site?: boolean;
 }
+
+/** The three doors. */
+export type DeskKind = 'riff' | 'spark' | 'quickie';
+
+/**
+ * What a piece connects to — mirrors `Connections` in
+ * src-tauri/src/commands/connections.rs. `links` are `[[wikilinks]]`, brackets
+ * included: `riffs-on` for a riff, `sparked-by` for a spark.
+ */
+export interface Connections {
+  conversations: string[];
+  topics: string[];
+  links: string[];
+  /** Ship (status: shipped) or keep as a vault draft. Sparks always ship. */
+  ship: boolean;
+}
+export const EMPTY_CONNECTIONS: Connections = { conversations: [], topics: [], links: [], ship: true };
+
+export interface VocabEntry { name: string; count: number; hub: boolean }
+export interface Vocabulary { conversations: VocabEntry[]; topics: VocabEntry[] }
+
+export interface SitePublishEvent { phase: 'queued' | 'started' | 'done' | 'failed'; detail: string }
 
 export interface NoteInfo {
   path: string;

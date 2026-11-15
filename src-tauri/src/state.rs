@@ -1,3 +1,4 @@
+use crate::commands::site::SitePublishState;
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 use tauri::menu::CheckMenuItem;
@@ -20,6 +21,9 @@ pub struct AppState {
     /// The "Launch at Login" check item in the menu bar menu, so settings
     /// changes made elsewhere can keep its tick in sync.
     pub launch_at_login_item: Mutex<Option<CheckMenuItem<Wry>>>,
+    /// One site publish at a time; a second request while one runs queues
+    /// exactly one more.
+    pub site_publish: Mutex<SitePublishState>,
 }
 
 impl AppState {
@@ -31,6 +35,7 @@ impl AppState {
             exit_flushing: Mutex::new(false),
             flush_signal: Arc::new((Mutex::new(false), Condvar::new())),
             launch_at_login_item: Mutex::new(None),
+            site_publish: Mutex::new(SitePublishState::default()),
         }
     }
 }

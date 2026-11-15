@@ -47,6 +47,24 @@
         "center": true
       },
       {
+        "label": "spark",
+        "title": "Spark",
+        "url": "index.html?window=spark",
+        "width": 600,
+        "height": 340,
+        "minWidth": 420,
+        "minHeight": 260,
+        "maxWidth": 760,
+        "maxHeight": 640,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": true
+      },
+      {
         "label": "command-palette",
         "title": "Drafts",
         "url": "index.html?window=command-palette",

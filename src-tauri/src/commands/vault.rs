@@ -2,11 +2,12 @@
 /// vault, searchable by name so a riff can link to people, ideas, and older
 /// notes — and the links are live the moment it publishes.
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
+use super::frontmatter;
 use super::settings;
 
 const MAX_RESULTS: usize = 30;
@@ -39,6 +40,29 @@ fn find_vault_root(publish_dir: &Path) -> PathBuf {
         }
     }
     publish_dir.to_path_buf()
+}
+
+/// The Obsidian vault the configured riffs folder lives in.
+pub fn vault_root_from_settings() -> Result<PathBuf, String> {
+    let settings = settings::load_settings_from_file()?;
+    let vault_dir = settings
+        .vault_dir
+        .filter(|v| !v.trim().is_empty())
+        .ok_or("No vault folder configured")?;
+    let publish_dir = PathBuf::from(&vault_dir);
+    if !publish_dir.is_dir() {
+        return Err(format!("Vault folder does not exist: {}", vault_dir));
+    }
+    Ok(find_vault_root(&publish_dir))
+}
+
+/// Where sparks land: the configured folder, else `<vault root>/Sparks`.
+pub fn sparks_dir_from_settings() -> Result<PathBuf, String> {
+    let settings = settings::load_settings_from_file()?;
+    if let Some(dir) = settings.sparks_dir.filter(|d| !d.trim().is_empty()) {
+        return Ok(PathBuf::from(dir));
+    }
+    Ok(vault_root_from_settings()?.join("Sparks"))
 }
 
 /// One vault scan, cached briefly — autocomplete fires per keystroke and the
@@ -224,9 +248,161 @@ pub fn search_vault_links(query: String) -> Result<Vec<VaultLink>, String> {
     Ok(rank(scan_vault(&root.to_string_lossy()), &query))
 }
 
+// ---------- the vault's vocabulary: conversations and topics ----------
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct VocabEntry {
+    pub name: String,
+    /// How many typed notes carry it.
+    pub count: usize,
+    /// A conversation with a hub note (`type: conversation`) — the site
+    /// renders those as real pages; the rest are loose tags.
+    pub hub: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+pub struct Vocabulary {
+    pub conversations: Vec<VocabEntry>,
+    pub topics: Vec<VocabEntry>,
+}
+
+/// Folders the site's sync ignores, so their properties don't count.
+const VOCAB_SKIP_DIRS: &[&str] = &["Templates", "_templates", "Bases", "Journals", "Freewriting"];
+
+fn collect_typed_notes(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
+    if depth > MAX_DEPTH {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            if name.eq_ignore_ascii_case("assets") || VOCAB_SKIP_DIRS.contains(&name.as_str()) {
+                continue;
+            }
+            collect_typed_notes(&path, out, depth + 1);
+        } else if name.ends_with(".md") {
+            out.push(path);
+        }
+    }
+}
+
+/// Canonical spelling wins: the hub note's own name for a conversation,
+/// otherwise the most-used casing.
+fn tally(root: &Path) -> Vocabulary {
+    let mut notes = Vec::new();
+    collect_typed_notes(root, &mut notes, 0);
+
+    let mut hubs: BTreeMap<String, String> = BTreeMap::new(); // lower → hub name
+    let mut conversations: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new(); // lower → spelling → count
+    let mut topics: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
+
+    for path in notes {
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Some((fm, _)) = frontmatter::parse(&content) else {
+            continue;
+        };
+        let Some(kind) = fm.scalar("type") else {
+            continue;
+        };
+        if kind.eq_ignore_ascii_case("conversation") || kind.eq_ignore_ascii_case("series") {
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                hubs.insert(stem.to_lowercase(), stem.to_string());
+            }
+        }
+        let mut convs = fm.list("conversations");
+        if convs.is_empty() {
+            convs = fm.list("series");
+        }
+        for c in convs {
+            *conversations
+                .entry(c.to_lowercase())
+                .or_default()
+                .entry(c)
+                .or_default() += 1;
+        }
+        for t in fm.list("topics") {
+            let t = t.trim_start_matches('#').to_string();
+            *topics
+                .entry(t.to_lowercase())
+                .or_default()
+                .entry(t)
+                .or_default() += 1;
+        }
+    }
+
+    let pick = |spellings: &BTreeMap<String, usize>| -> String {
+        spellings
+            .iter()
+            .max_by_key(|(_, n)| **n)
+            .map(|(s, _)| s.clone())
+            .unwrap_or_default()
+    };
+
+    let mut conv_entries: Vec<VocabEntry> = Vec::new();
+    for (lower, spellings) in &conversations {
+        let count = spellings.values().sum();
+        let name = hubs.get(lower).cloned().unwrap_or_else(|| pick(spellings));
+        conv_entries.push(VocabEntry { name, count, hub: hubs.contains_key(lower) });
+    }
+    for (lower, name) in &hubs {
+        if !conversations.contains_key(lower) {
+            conv_entries.push(VocabEntry { name: name.clone(), count: 0, hub: true });
+        }
+    }
+    // Hubs first, then by use, then by name.
+    conv_entries.sort_by(|a, b| {
+        b.hub
+            .cmp(&a.hub)
+            .then(b.count.cmp(&a.count))
+            .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    let mut topic_entries: Vec<VocabEntry> = topics
+        .values()
+        .map(|spellings| VocabEntry { name: pick(spellings), count: spellings.values().sum(), hub: false })
+        .collect();
+    topic_entries.sort_by(|a, b| b.count.cmp(&a.count).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+
+    Vocabulary { conversations: conv_entries, topics: topic_entries }
+}
+
+struct VocabCache {
+    root: PathBuf,
+    scanned_at: Instant,
+    vocabulary: Vocabulary,
+}
+
+static VOCAB_CACHE: Mutex<Option<VocabCache>> = Mutex::new(None);
+
+/// Every conversation and topic in use across the vault, for the pickers.
+#[tauri::command]
+pub fn vault_vocabulary() -> Result<Vocabulary, String> {
+    let Ok(root) = vault_root_from_settings() else {
+        return Ok(Vocabulary::default());
+    };
+    let mut cache = VOCAB_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(c) = cache.as_ref() {
+        if c.root == root && c.scanned_at.elapsed() < CACHE_TTL {
+            return Ok(c.vocabulary.clone());
+        }
+    }
+    let vocabulary = tally(&root);
+    *cache = Some(VocabCache { root, scanned_at: Instant::now(), vocabulary: vocabulary.clone() });
+    Ok(vocabulary)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{collect_md_notes, find_vault_root, obsidian_url, percent_encode, rank, VaultLink};
+    use super::{collect_md_notes, find_vault_root, obsidian_url, percent_encode, rank, tally, VaultLink};
     use std::path::Path;
 
     #[test]
@@ -341,5 +517,25 @@ mod tests {
     fn duplicate_note_names_collapse() {
         let links = vec![link("Kara"), link("Kara")];
         assert_eq!(rank(links, "ka").len(), 1);
+    }
+
+    #[test]
+    fn vocabulary_counts_typed_notes_and_prefers_hub_spelling() {
+        let vault = temp_vault();
+        fs::create_dir_all(vault.join("Conversations")).unwrap();
+        fs::write(vault.join("Conversations/Befriending shame.md"), "---\ntype: conversation\nstatus:\n  - draft\n---\n").unwrap();
+        fs::write(vault.join("a.md"), "---\ntype: riff\ntopics:\n  - recovery\n  - Money\nconversations:\n  - befriending shame\n---\n").unwrap();
+        fs::write(vault.join("b.md"), "---\ntype: spark\ntopics: [recovery]\nconversations:\n  - Ember 2026\n---\n").unwrap();
+        // Untyped notes and template folders don't count.
+        fs::write(vault.join("c.md"), "---\ntopics:\n  - ignored\nconversations:\n  - ignored\n---\n").unwrap();
+        fs::create_dir_all(vault.join("Templates")).unwrap();
+        fs::write(vault.join("Templates/Spark.md"), "---\ntype: spark\ntopics:\n  - templated\n---\n").unwrap();
+
+        let v = tally(&vault);
+        let convs: Vec<(String, usize, bool)> = v.conversations.iter().map(|e| (e.name.clone(), e.count, e.hub)).collect();
+        assert_eq!(convs, vec![("Befriending shame".to_string(), 1, true), ("Ember 2026".to_string(), 1, false)]);
+        let topics: Vec<(String, usize)> = v.topics.iter().map(|e| (e.name.clone(), e.count)).collect();
+        assert_eq!(topics, vec![("recovery".to_string(), 2), ("Money".to_string(), 1)]);
+        let _ = fs::remove_dir_all(&vault);
     }
 }

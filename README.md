@@ -2,27 +2,35 @@
 <h1 align="center">riff</h1>
 <p align="center">A little room for what’s alive.</p>
 
-Riff is Rob’s macOS writing room for catching a thought and following it somewhere. Quickie captures a fragment. Riff gives it room to unfold. Finished writing lands in an Obsidian vault as ordinary Markdown.
+Riff is Rob’s macOS writing room for catching a thought and following it somewhere. Three doors, one vault: a **quickie** is a scratch note for later, a **spark** is a line or three that goes live, a **riff** is a small complete thing written in one sitting. Everything lands in the Obsidian vault as ordinary Markdown with the vault’s own front matter, so the site’s sync sees exactly what it would have seen had the note been written in Obsidian.
 
-The interface is an open notebook with a draft margin, a paper page, and a compact writing toolbar. The visual language comes from Bricks. Woven paper, warm light and dark palettes, indigo and amber ink, restrained glass surfaces, iA Writer Duo body text, and bookish serif headings.
+The interface is one page of paper, mono chrome in lowercase, iA Writer Duo for the words and nothing else at full size.
 
-## Two ways in
+## Three doors
 
-**Quickie** opens a compact window with Hyper+Q. Write a fragment and use ⌘↵ to append it to your running Quickies.md note. “Keep going in riff” saves that fragment as a riff and brings it into the writing room. Escape saves the unfinished quickie and tucks it away.
+**Riff** opens the fullscreen room with Hyper+R. A live Markdown editor with wiki links, headings, lists, images, undo, native spellcheck. The footer carries the riff’s connections and the verb: ⌘↵ ships it (`status: shipped`), or flip the `live` pill to `draft` to keep it a vault draft. Drafts autosave to `~/Documents/Riff` and wait behind ⌘K; ⌘N starts fresh; Escape sets the room aside; ⌘. fades the chrome.
 
-**Riff** opens the writing room with Hyper+R. The live Markdown editor supports headings, emphasis, lists, tasks, tables, images, links, wiki links, undo, native spellcheck, and find. Use the Aa button for formatting tools. Focus view with ⌘. leaves more space around the words.
+**Spark** opens a small window with Hyper+S. What just struck you, a chip or two, ⌘↵. The note is written to `Sparks/` named by its first line, stamped with the minute, `status: shipped`, and the window is gone.
 
-The notebook margin shows recent drafts with their titles and word counts. ⌘K opens the full searchable list. Narrow windows collapse the margin to a small navigation spine. ⌘N starts a new riff after saving the current one. Escape saves and hides the room. Shortcuts can be changed in Settings.
+**Quickie** opens a small window with Hyper+Q. ⌘↵ appends it to the running `Quickies.md` note, which never reaches the site. Two hand-offs: *make it a spark* and *keep going in riff*.
 
-## Your words
+## Connections
 
-Edits enter a local recovery record immediately and save to disk after a 500 ms pause. Switching drafts, starting fresh, and sending wait for the current write to finish. Failed writes leave the current document open with an error and retry action. Changing text direction reconfigures the editor without replacing the document or its undo history.
+Every spark and riff can say what it belongs to, in the vault’s own vocabulary:
 
-Drafts live in `~/Documents/Riff` unless a previous configuration specifies another folder. Quickie has a separate scratch file in `~/.riff/quickie-draft.md`. This keeps the same thought from being edited in two windows. Clearing a draft preserves the empty document. Source images are retained because multiple drafts can refer to the same asset.
+- **conversation** — the hub notes in the vault (`type: conversation`), hubs first, with how often each is used. ⌘1.
+- **topic** — every topic in use across the vault, by frequency, or a new one. ⌘2.
+- **sparked by / riffs on** — any note in the vault, written as a `[[wikilink]]`. ⌘3.
 
-Choose a folder inside your Obsidian vault in Settings, under Files. “Send to vault” creates a Markdown file with a title, slug, and date. A leading H1 becomes its title. Names and image collisions preserve existing vault files. Missing images stop the send and keep the draft. File writes stage and flush a complete file before replacing the destination.
+The pickers read the vault live, so spelling never drifts. For a riff the chips ride in a sidecar keyed by the draft (`~/.riff/connections.json`) and become `topics`, `riffs-on`, and `conversations` in the front matter on send; a spark’s become `topics`, `sparked-by`, and `conversations`.
 
-The completion screen offers another thought, a copy for sharing, and a way to open the note in Obsidian. Sending writes to the vault. Any website publishing behavior belongs to the separate vault publishing workflow.
+## Publishing the site
+
+When a spark or a shipped riff leaves Riff, the site’s `Publish.command` runs in the background from the repo chosen in Settings → Files, and a notification says when it’s live (about a minute). Two sends in quick succession queue one extra run rather than racing. The menu bar also has *Publish the site* for a manual run. The switch is in Settings → Files.
+
+## Settings
+
+⌘, from any door. Files: the Riffs folder, the Sparks folder (defaults to `Sparks/` beside Riffs), the Quickies note, and the site repo. Keys: the three door hotkeys are global; everything else works while Riff is up. Drafts live in `~/Documents/Riff`; the spark and quickie windows keep their unfinished text in `~/.riff/`.
 
 ## Development
 

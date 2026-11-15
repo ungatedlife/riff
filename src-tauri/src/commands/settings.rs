@@ -88,6 +88,18 @@ pub struct RiffSettings {
     pub window_opacity: f64,
     #[serde(default)]
     pub custom_fonts: Vec<CustomFontEntry>,
+    /// Absolute path of the vault folder sparks land in. None/empty =
+    /// `<vault root>/Sparks`, where the vault root is found by walking up
+    /// from `vault_dir` to the `.obsidian` marker.
+    #[serde(default)]
+    pub sparks_dir: Option<String>,
+    /// The website repo (`Publish.command` lives there). Shipping a spark or
+    /// riff runs it in the background so the piece is live in a minute.
+    #[serde(default)]
+    pub site_dir: Option<String>,
+    /// Run the site's publish after anything ships from Riff.
+    #[serde(default = "default_true")]
+    pub auto_publish_site: bool,
 }
 
 impl Default for RiffSettings {
@@ -108,14 +120,18 @@ impl Default for RiffSettings {
             font_family: None,
             window_opacity: 1.0,
             custom_fonts: vec![],
+            sparks_dir: None,
+            site_dir: None,
+            auto_publish_site: true,
         }
     }
 }
 
 pub fn default_system_shortcuts() -> HashMap<String, String> {
     HashMap::from([
-        // Hyper (Cmd+Ctrl+Alt+Shift) + R/Q — pairs with a Caps Lock hyper key.
+        // Hyper (Cmd+Ctrl+Alt+Shift) + R/S/Q — pairs with a Caps Lock hyper key.
         ("summon".to_string(), "Cmd+Ctrl+Alt+Shift+R".to_string()),
+        ("spark".to_string(), "Cmd+Ctrl+Alt+Shift+S".to_string()),
         ("quickie".to_string(), "Cmd+Ctrl+Alt+Shift+Q".to_string()),
         ("search".to_string(), "Cmd+Shift+P".to_string()),
         ("last_note".to_string(), "Cmd+Shift+L".to_string()),
@@ -123,10 +139,10 @@ pub fn default_system_shortcuts() -> HashMap<String, String> {
     ])
 }
 
-/// The only actions registered as OS-level hotkeys: the two capture
-/// surfaces. Everything else works only while Riff is active, so Riff never
-/// swallows another app's ⌘⇧P.
-pub const GLOBAL_ACTIONS: &[&str] = &["summon", "quickie"];
+/// The only actions registered as OS-level hotkeys: the three doors — riff,
+/// spark, quickie. Everything else works only while Riff is active, so Riff
+/// never swallows another app's ⌘⇧P.
+pub const GLOBAL_ACTIONS: &[&str] = &["summon", "spark", "quickie"];
 
 pub fn is_global_action(action: &str) -> bool {
     GLOBAL_ACTIONS.contains(&action)
@@ -464,6 +480,7 @@ mod tests {
     #[test]
     fn only_the_capture_surfaces_are_global_hotkeys() {
         assert!(is_global_action("summon"));
+        assert!(is_global_action("spark"));
         assert!(is_global_action("quickie"));
         assert!(!is_global_action("search"));
         assert!(!is_global_action("last_note"));
@@ -504,6 +521,18 @@ mod tests {
     #[test]
     fn launch_at_login_defaults_on() {
         assert!(RiffSettings::default().launch_at_login);
+    }
+    #[test]
+    fn older_settings_files_gain_the_spark_hotkey_and_site_defaults() {
+        let mut settings = RiffSettings::default();
+        settings.system_shortcuts.remove("spark");
+        let normalized = normalize_loaded_settings(settings);
+        assert_eq!(
+            normalized.system_shortcuts.get("spark").map(String::as_str),
+            Some("Cmd+Ctrl+Alt+Shift+S")
+        );
+        assert!(normalized.auto_publish_site);
+        assert!(normalized.site_dir.is_none());
     }
 
     #[test]
