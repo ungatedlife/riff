@@ -292,11 +292,22 @@ fn ship_to_site(app: &AppHandle, shipped: bool) -> Option<String> {
     if !shipped {
         return Some("Kept as a draft in the vault.".to_string());
     }
-    match settings::load_settings_from_file() {
-        Ok(s) if !s.auto_publish_site => Some("Site publishing is off in Settings.".to_string()),
-        Ok(_) => site::request_site_publish(app).err(),
-        Err(e) => Some(e),
+    let settings = match settings::load_settings_from_file() {
+        Ok(s) => s,
+        Err(e) => return Some(e),
+    };
+    // No script chosen: there is nothing to run, and nothing worth saying.
+    if settings
+        .site_dir
+        .as_deref()
+        .is_none_or(|d| d.trim().is_empty())
+    {
+        return None;
     }
+    if !settings.auto_publish_site {
+        return Some("Publishing is off in Settings.".to_string());
+    }
+    site::request_site_publish(app).err()
 }
 
 /// Words as the room counts them: tokens with at least one letter or digit,
