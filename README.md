@@ -38,6 +38,19 @@ When a spark or a shipped riff leaves Riff, the site’s `Publish.command` runs 
 
 ⌘, from any door. Files: the Riffs folder, the Sparks folder (defaults to `Sparks/` beside Riffs), the Quickies note, and the site repo. Keys: the three door hotkeys are global; everything else works while Riff is up. Drafts live in `~/Documents/Riff`; the spark and quickie windows keep their unfinished text in `~/.riff/`.
 
+## Updates
+
+Riff keeps itself current. A little after launch, and every six hours while it sits in the menu bar, it reads the release feed on GitHub. A newer version is downloaded, checked against the update key built into the app, and put in place; it opens the next time Riff starts. The menu bar shows which version is running, with *Check for Updates…*, which becomes *Restart to Update* once one is installed.
+
+## Releasing
+
+```sh
+./scripts/release.sh minor     # raise the version (patch | minor | major) and build it
+./scripts/release.sh publish   # put that build on GitHub
+```
+
+Building signs Riff with the Developer ID certificate, has Apple check it (through Xcode's signed-in account, no password), and makes a disk image, the update archive, and `latest.json`, all in `src-tauri/target/release-copy/out`. Nothing leaves the Mac until `publish`, which pushes `main` and a version tag and makes the GitHub release that installed copies read. The script's opening comment says what it needs, including the update key at `~/.tauri/riff-updater.key`.
+
 ## Development
 
 Requires Node and Rust with the macOS toolchain.
