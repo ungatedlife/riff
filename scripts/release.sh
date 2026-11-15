@@ -190,6 +190,10 @@ PLIST
 }
 JSON
 
+    # Leave one Riff on this Mac besides the installed one: the finished files in out/.
+    # Spare copies of the app in build folders can end up answering riff:// links.
+    rm -rf "$WORK/app" "$WORK/dmg" "$WORK/upload" "$ARCHIVE" src-tauri/target/release/bundle
+
     echo "→ Ready, in $(pwd)/$OUT:"
     ls -1 "$OUT" | sed 's/^/     /'
     echo "  Nothing has left this Mac. When you are ready: ./scripts/release.sh publish"
