@@ -87,6 +87,18 @@ kbd { font: inherit; font-size: .85em; opacity: .55; margin-left: .7em; letter-s
 .hub-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
 .picker-empty { padding: 10px 9px 8px; font-size: 11px; color: var(--stone); }
 
+/* ── the attached passage: read-only, under a spark's words, above a riff's.
+   A long one scrolls inside its card; the attribution stays in view. ── */
+.attached-quote { position: relative; flex-shrink: 0; display: flex; flex-direction: column; margin: 0 28px 14px; padding: 10px 34px 10px 14px; border: 1px solid var(--hair-strong); border-radius: 10px; max-height: 124px; font-size: 12.5px; line-height: 1.6; color: var(--stone); }
+.attached-quote blockquote { margin: 0; min-height: 0; overflow-y: auto; color: rgb(var(--color-ink) / .78); }
+.attached-quote p { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.attached-quote p + p { margin-top: .6em; }
+.attached-quote figcaption { flex-shrink: 0; margin-top: 6px; font-size: 10.5px; letter-spacing: .02em; }
+.attached-quote-remove { position: absolute; top: 9px; right: 10px; display: inline-flex; padding: 3px; color: var(--stone); opacity: .45; transition: opacity .15s, color .15s; }
+.attached-quote-remove:hover, .attached-quote-remove:focus-visible { opacity: 1; color: var(--ink); }
+.desk-riff .attached-quote { width: min(var(--column) - 16px, calc(100% - 112px)); margin: clamp(16px, 6vh, 64px) auto 0; max-height: 34vh; font-size: 13.5px; }
+.desk-riff.has-quote .cm-content.riff-editor { padding-top: 28px; }
+
 /* ── focus: the chrome fades until the pointer asks for it ── */
 .desk-riff.is-focus .desk-top, .desk-riff.is-focus .desk-bottom { opacity: 0; }
 .desk-riff.is-focus .desk-top:hover, .desk-riff.is-focus .desk-bottom:hover, .desk-riff.is-focus .desk-bottom:focus-within { opacity: 1; }
@@ -160,6 +172,8 @@ kbd { font: inherit; font-size: .85em; opacity: .55; margin-left: .7em; letter-s
   .desk-top { padding: 0 18px; }
   .desk .cm-content.riff-editor { max-width: calc(100% - 48px); }
   .desk-riff .desk-bottom { width: calc(100% - 48px); }
+  .desk-riff .attached-quote { width: calc(100% - 64px); }
+  .desk-spark .attached-quote { margin-inline: 20px; }
   .desk-spark .cm-content.riff-editor, .desk-quickie .cm-content.riff-editor { max-width: 100%; padding-inline: 20px; }
   .desk-spark .desk-bottom, .desk-quickie .desk-bottom { padding-inline: 18px; }
   .words { display: none; }

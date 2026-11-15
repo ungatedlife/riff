@@ -70,8 +70,27 @@ export interface Connections {
   links: string[];
   /** Ship (status: shipped) or keep as a vault draft. Sparks always ship. */
   ship: boolean;
+  /** The passage this piece responds to, if another app handed one over. */
+  quote?: Quote | null;
 }
-export const EMPTY_CONNECTIONS: Connections = { conversations: [], topics: [], links: [], ship: true };
+export const EMPTY_CONNECTIONS: Connections = { conversations: [], topics: [], links: [], ship: true, quote: null };
+
+/**
+ * A passage another app (Trove, the reading app) handed over to respond to.
+ * Mirrors `Quote` in src-tauri/src/commands/connections.rs. It rides with the
+ * piece's connections and is never part of the text being edited.
+ */
+export interface Quote {
+  /** The passage itself. Paragraphs are separated by a blank line. */
+  text: string;
+  /** The book's title. */
+  title: string;
+  author: string;
+  /** The printed page label. */
+  page: string;
+  /** The vault note and block it lives at, without the `[[ ]]`. Empty when there is none. */
+  link: string;
+}
 
 export interface VocabEntry { name: string; count: number; hub: boolean }
 export interface Vocabulary { conversations: VocabEntry[]; topics: VocabEntry[] }

@@ -24,6 +24,12 @@ Every spark and riff can say what it belongs to, in the vault’s own vocabulary
 
 The pickers read the vault live, so spelling never drifts. For a riff the chips ride in a sidecar keyed by the draft (`~/.riff/connections.json`) and become `topics`, `riffs-on`, and `conversations` in the front matter on send; a spark’s become `topics`, `sparked-by`, and `conversations`.
 
+## From another app
+
+Trove, the reading app, can hand Riff a passage to respond to. It writes `~/.riff/handoffs/<id>.json` (`kind`, `quote`, `link`, `title`, `author`, `page`) and opens `riff://spark?handoff=<id>` or `riff://riff?handoff=<id>`. Riff reads the file, deletes it, and opens that door with the passage attached: under the words in the spark window, above the page in the room. The room starts a fresh draft for it; the one in progress is saved and waits behind ⌘K.
+
+The passage is never part of the text being edited. On send it joins the note as a blockquote with its attribution, below a spark's words or above a riff's, and its `link` lands in `sparked-by` / `riffs-on`. The note is still named by the first line of what was written, never by the quote, and a quote with no words of your own can't be sent. The small × takes the passage off again, along with its link.
+
 ## Publishing the site
 
 When a spark or a shipped riff leaves Riff, the site’s `Publish.command` runs in the background from the repo chosen in Settings → Files, and a notification says when it’s live (about a minute). Two sends in quick succession queue one extra run rather than racing. The menu bar also has *Publish the site* for a manual run. The switch is in Settings → Files.

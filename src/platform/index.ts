@@ -60,6 +60,8 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     case 'get_connections': result = data.connections?.[String(args.id)] ?? null; break;
     case 'save_connections': data.connections = { ...(data.connections ?? {}), [String(args.id)]: args.connections }; write(data); break;
     case 'remove_connections': if (data.connections) { delete data.connections[String(args.id)]; write(data); } break;
+    // Passages are handed over by other Mac apps; the preview never has one waiting.
+    case 'take_handoff': result = null; break;
     case 'get_spark_draft': result = data.sparkDraft || ''; break;
     case 'save_spark_draft': data.sparkDraft = content; write(data); result = { path: 'preview/spark-draft.md' }; break;
     case 'publish_spark': {

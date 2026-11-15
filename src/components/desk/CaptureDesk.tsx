@@ -10,12 +10,14 @@ import { resolveImagePaths, unresolveImagePaths } from '@/utils/imageMarkdownPat
 import { SYSTEM_SHORTCUT_DEFAULTS } from '@/utils/systemShortcuts';
 import { eventMatchesShortcut } from '@/utils/shortcutMatch';
 import { loadCustomFont } from '@/utils/fonts';
-import { EMPTY_CONNECTIONS, type Connections as Conn, type DeskKind, type RiffSettings, type SitePublishEvent } from '@/types';
+import { attachQuote, detachQuote } from '@/utils/quote';
+import { EMPTY_CONNECTIONS, type Connections as Conn, type DeskKind, type Quote, type RiffSettings, type SitePublishEvent } from '@/types';
 import Paper from './Paper';
 import Sheet from './Sheet';
 import Preferences from './Preferences';
 import DraftShelf from './DraftShelf';
 import Connections from './Connections';
+import AttachedQuote from './AttachedQuote';
 
 const initialSettings: RiffSettings = { theme_mode: '', active_theme: '', font_size: 21, text_direction: 'auto', hide_dock_icon: true, hide_tray_icon: false, launch_at_login: true, custom_themes: [], system_shortcuts: SYSTEM_SHORTCUT_DEFAULTS };
 
@@ -178,8 +180,8 @@ export default function CaptureDesk({ kind, onDismiss }: { kind: DeskKind; onDis
   }, [kind, isRiff, openDraft, notify, session]);
 
   // ---- actions ----
-  const fresh = useCallback(async () => {
-    try { await session.transact(async () => session.replace('')); setConn(EMPTY_CONNECTIONS); connLoadedFor.current = null; setComplete(null); setPanel(null); setMessage(''); setSite(null); }
+  const fresh = useCallback(async (start: Conn = EMPTY_CONNECTIONS) => {
+    try { await session.transact(async () => session.replace('')); setConn(start); connLoadedFor.current = null; setComplete(null); setPanel(null); setMessage(''); setSite(null); }
     catch (e) { notify(e); }
   }, [session, notify]);
   const park = useCallback(async () => {
@@ -219,6 +221,25 @@ export default function CaptureDesk({ kind, onDismiss }: { kind: DeskKind; onDis
     finally { setPublishing(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, kind, conn, settings.quickies_file, settings.vault_dir, notify]);
+  // ---- a passage handed over by another app (Trove opens `riff://spark?handoff=…`) ----
+  // The quote never goes into the editor. A spark takes it on beside whatever
+  // is in its window now. A riff starts a fresh draft first (the one in the
+  // room is saved and waits on the shelf), so the quote lands on a clean page.
+  const takeHandoff = useCallback(async () => {
+    const quote = await invoke<Quote | null>('take_handoff', { door: kind });
+    if (!quote) return;
+    if (isRiff) await fresh(attachQuote(EMPTY_CONNECTIONS, quote));
+    else { setConn(c => attachQuote(c, quote)); setComplete(null); }
+  }, [kind, isRiff, fresh]);
+  useEffect(() => {
+    if (kind === 'quickie' || !ready) return;
+    // Ask once as soon as this window can hear the event: when the URL is
+    // what launched Riff, the event went out before anything was listening.
+    const off = listen('handoff', () => { void takeHandoff().catch(notify); });
+    void off.then(() => takeHandoff()).catch(notify);
+    return () => { void off.then(fn => fn()); };
+  }, [kind, ready, takeHandoff, notify]);
+
   /** A quickie that turns out to be a riff, or a spark. */
   const handOff = useCallback(async (to: 'riff' | 'spark') => {
     try {
@@ -314,9 +335,13 @@ export default function CaptureDesk({ kind, onDismiss }: { kind: DeskKind; onDis
   const status = draft.error ? 'Couldn’t save' : draft.status === 'saving' || draft.status === 'waiting' ? 'saving' : savedFlash ? 'saved' : '';
   const siteLine = site ? (site.phase === 'done' ? `Live. ${site.detail}` : site.phase === 'failed' ? `The site didn’t publish: ${site.detail}` : site.phase === 'queued' ? 'Publishing after the one in flight.' : 'Publishing to the site…') : '';
   const placeholder = kind === 'quickie' ? 'A thought for later…' : kind === 'spark' ? 'What just struck you?' : 'Begin anywhere…';
+  // The attached passage: above the page for a riff, under it for a spark
+  // (his words, then the quote, like a quote tweet). Removing it also
+  // removes the link it brought.
+  const quoted = kind !== 'quickie' && conn.quote ? <AttachedQuote quote={conn.quote} onRemove={() => { setConn(detachQuote); editor.current?.focus(); }}/> : null;
   const sendButton = <button className="send" disabled={empty || draft.locked || !ready || publishing} onClick={() => void send()}>{publishing ? 'Sending…' : verb}<kbd>⌘↵</kbd></button>;
 
-  return <main className={`desk desk-${kind} ${focus ? 'is-focus' : ''} ${!empty ? 'has-writing' : ''} ${complete ? 'is-done' : ''}`} style={{ '--editor-font-size': `${fontSize}px`, '--editor-font-family': settings.font_family ? `"${settings.font_family}", "iA Writer Duo S", monospace` : '"iA Writer Duo S", monospace' } as React.CSSProperties}>
+  return <main className={`desk desk-${kind} ${focus ? 'is-focus' : ''} ${!empty ? 'has-writing' : ''} ${complete ? 'is-done' : ''} ${quoted ? 'has-quote' : ''}`} style={{ '--editor-font-size': `${fontSize}px`, '--editor-font-family': settings.font_family ? `"${settings.font_family}", "iA Writer Duo S", monospace` : '"iA Writer Duo S", monospace' } as React.CSSProperties}>
     <Paper/>
     <header className="desk-top" data-tauri-drag-region>
       <span className="eyebrow" data-tauri-drag-region>{kind}<i>·</i>{DATE.format(new Date())}{isRiff && draft.path && !complete && <><i>·</i>{conn.ship ? 'live' : 'draft'}</>}</span>
@@ -341,9 +366,11 @@ export default function CaptureDesk({ kind, onDismiss }: { kind: DeskKind; onDis
         <button className="quiet" onClick={() => { setComplete(null); void dismiss(); }}>Close<kbd>esc</kbd></button>
       </div>}
     </section> : <>
+      {isRiff && quoted}
       <section className="desk-page" aria-label={kind === 'riff' ? 'Writing room' : `${kind} capture`}>
         {ready && <Editor key={draft.id} ref={editor} initialContent={storedText} onChange={text => session.edit(unresolveImagePaths(text))} readOnly={draft.locked} placeholder={placeholder} showFormatToolbar={isRiff && format && !focus} textDirection={settings.text_direction as 'auto' | 'ltr' | 'rtl'} forgedCaret onPublish={() => void send()} onImagePaste={isRiff ? imagePaste : undefined} onImageDropPath={isRiff ? imageDrop : undefined} onCursorChange={saveCursor}/>}
       </section>
+      {kind === 'spark' && quoted}
       <footer className="desk-bottom">
         {kind !== 'quickie' && <Connections value={conn} onChange={setConn} linkLabel={kind === 'spark' ? 'sparked by' : 'riffs on'} open={pickerOpen} onOpenHandled={() => setPickerOpen(null)} onDone={() => editor.current?.focus()}/>}
         {kind === 'quickie' && <span className="handoff">
