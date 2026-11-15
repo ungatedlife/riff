@@ -2,23 +2,31 @@
 <h1 align="center">riff</h1>
 <p align="center">A little room for what’s alive.</p>
 
-Riff is Rob’s macOS writing room for catching a thought and following it somewhere. Three doors, one vault: a **quickie** is a scratch note for later, a **spark** is a line or three that goes live, a **riff** is a small complete thing written in one sitting. Everything lands in the Obsidian vault as ordinary Markdown with the vault’s own front matter, so the site’s sync sees exactly what it would have seen had the note been written in Obsidian.
+Riff is a small Mac app for catching a thought and following it somewhere. It lives in the menu bar and has three doors, each a key away from any app: a **quickie** is a note for later, a **spark** is a line or three you send the moment it strikes, a **riff** is a small complete thing written in one sitting. Everything it writes is plain Markdown in a folder you choose, with front matter Obsidian reads, so it sits happily inside an Obsidian vault (or any folder at all).
 
 The interface is one page of paper, mono chrome in lowercase, iA Writer Duo for the words and nothing else at full size.
 
+## Install
+
+Download `Riff-<version>.dmg` from the [latest release](https://github.com/ungatedlife/riff/releases/latest), open it, and drag Riff onto Applications. It runs on Apple silicon Macs with macOS 10.15 or later, and keeps itself up to date (see *Updates* below).
+
+The first launch opens a welcome screen: what the three doors are, where your writing should go, and whether Riff should open when you log in. After that Riff stays out of sight in the menu bar until a key opens one of its doors.
+
 ## Three doors
 
-**Riff** opens the fullscreen room with Hyper+R. A live Markdown editor with wiki links, headings, lists, images, undo, native spellcheck. The footer carries the riff’s connections and the verb: ⌘↵ ships it (`status: shipped`), or flip the `live` pill to `draft` to keep it a vault draft. Drafts autosave to `~/Documents/Riff` and wait behind ⌘K; ⌘N starts fresh; Escape sets the room aside; ⌘. fades the chrome.
+The keys below are the defaults; change them in Settings → Keys.
 
-**Spark** opens a small window with Hyper+S. What just struck you, a chip or two, ⌘↵. The note is written to `Sparks/` named by its first line, stamped with the minute, `status: shipped`, and the window is gone.
+**Riff** opens the fullscreen room with ⌃⌥⌘R. A live Markdown editor with wiki links, headings, lists, images, undo, native spellcheck. The footer carries the riff’s connections and the verb: ⌘↵ ships it (`status: shipped`), or flip the `live` pill to `draft` to keep it a draft. Unfinished riffs save as you write to `~/Documents/Riff` and wait behind ⌘K; ⌘N starts fresh; Escape sets the room aside; ⌘. fades the chrome.
 
-**Quickie** opens a small window with Hyper+Q. ⌘↵ appends it to the running `Quickies.md` note, which never reaches the site. Two hand-offs: *make it a spark* and *keep going in riff*.
+**Spark** opens a small window with ⌃⌥⌘S. What just struck you, a chip or two, ⌘↵. The note is written to `Sparks/` named by its first line, stamped with the minute, `status: shipped`, and the window is gone.
+
+**Quickie** opens a small window with ⌃⌥⌘Q. ⌘↵ adds it to one running `Quickies.md` note. Two hand-offs: *make it a spark* and *keep going in riff*.
 
 ## Connections
 
 Every spark and riff can say what it belongs to, in the vault’s own vocabulary:
 
-- **conversation** — the hub notes in the vault (`type: conversation`), hubs first, with how often each is used. ⌘1.
+- **conversation** — notes in the vault marked `type: conversation`, with how often each is used. ⌘1.
 - **topic** — every topic in use across the vault, by frequency, or a new one. ⌘2.
 - **sparked by / riffs on** — any note in the vault, written as a `[[wikilink]]`. ⌘3.
 
@@ -26,17 +34,17 @@ The pickers read the vault live, so spelling never drifts. For a riff the chips 
 
 ## From another app
 
-Trove, the reading app, can hand Riff a passage to respond to. It writes `~/.riff/handoffs/<id>.json` (`kind`, `quote`, `link`, `title`, `author`, `page`) and opens `riff://spark?handoff=<id>` or `riff://riff?handoff=<id>`. Riff reads the file, deletes it, and opens that door with the passage attached: under the words in the spark window, above the page in the room. The room starts a fresh draft for it; the one in progress is saved and waits behind ⌘K.
+Another app can hand Riff a passage to respond to (Trove, a reading app, does). It writes `~/.riff/handoffs/<id>.json` (`kind`, `quote`, `link`, `title`, `author`, `page`) and opens `riff://spark?handoff=<id>` or `riff://riff?handoff=<id>`. Riff reads the file, deletes it, and opens that door with the passage attached: under the words in the spark window, above the page in the room. The room starts a fresh draft for it; the one in progress is saved and waits behind ⌘K.
 
 The passage is never part of the text being edited. On send it joins the note as a blockquote with its attribution, below a spark's words or above a riff's, and its `link` lands in `sparked-by` / `riffs-on`. The note is still named by the first line of what was written, never by the quote, and a quote with no words of your own can't be sent. The small × takes the passage off again, along with its link.
 
-## Publishing the site
+## After something ships
 
-When a spark or a shipped riff leaves Riff, the site’s `Publish.command` runs in the background from the repo chosen in Settings → Files, and a notification says when it’s live (about a minute). Two sends in quick succession queue one extra run rather than racing. The menu bar also has *Publish the site* for a manual run. The switch is in Settings → Files.
+Riff can run a script of your choosing each time a spark or a shipped riff leaves it: one that publishes your website, say, or syncs or backs up. Choose it in Settings → Files (or choose a folder holding a `Publish.command`). It runs in the background from its own folder; two sends in quick succession queue one extra run rather than racing. Its last line starting with `✓` becomes the summary Riff shows. If it fails, the menu bar item says so and the next spark window or room shows why, with *Publish again*, until a run succeeds. The menu bar also has *Publish the site* for a run by hand. With no script chosen, nothing extra happens.
 
 ## Settings
 
-⌘, from any door. Files: the Riffs folder, the Sparks folder (defaults to `Sparks/` beside Riffs), the Quickies note, and the site repo. Keys: the three door hotkeys are global; everything else works while Riff is up. Drafts live in `~/Documents/Riff`; the spark and quickie windows keep their unfinished text in `~/.riff/`.
+⌘, from any door. Writing: appearance, size, typeface. Files: the Riffs folder, the Sparks folder (defaults to `Sparks/` at the top of the vault), the Quickies note, and the after-ship script. Keys: whether Riff opens at login, and the keys; the three doors open from anywhere, the rest while a Riff window is open. Unfinished riffs live in `~/Documents/Riff`; the spark and quickie windows keep their unfinished text in `~/.riff/`.
 
 ## Updates
 
