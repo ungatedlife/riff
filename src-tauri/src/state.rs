@@ -1,8 +1,9 @@
 use crate::commands::connections::Quote;
 use crate::commands::site::SitePublishState;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Condvar, Mutex};
-use tauri::menu::CheckMenuItem;
+use tauri::menu::{CheckMenuItem, MenuItem};
 use tauri::Wry;
 
 pub struct LastSavedNote {
@@ -32,6 +33,17 @@ pub struct AppState {
     /// The door a `riff://` URL asked for before the windows existed (the
     /// URL is what launched Riff). Shown as soon as the app is ready.
     pub door_waiting: Mutex<Option<&'static str>>,
+    /// The menu bar's "Check for Updates…" item. Once an update is in
+    /// place its text becomes "Restart to Update to <version>".
+    pub update_item: Mutex<Option<MenuItem<Wry>>>,
+    /// The version that has been downloaded and put in place, waiting for
+    /// a restart. See `updates.rs`.
+    pub update_ready: Mutex<Option<String>>,
+    /// True while an update check is running, so two never overlap.
+    pub update_checking: AtomicBool,
+    /// The menu bar's "Publish the site" item, so a failed publish can
+    /// stay visible there until one succeeds.
+    pub publish_item: Mutex<Option<MenuItem<Wry>>>,
 }
 
 impl AppState {
@@ -46,6 +58,10 @@ impl AppState {
             site_publish: Mutex::new(SitePublishState::default()),
             pending_handoffs: Mutex::new(HashMap::new()),
             door_waiting: Mutex::new(None),
+            update_item: Mutex::new(None),
+            update_ready: Mutex::new(None),
+            update_checking: AtomicBool::new(false),
+            publish_item: Mutex::new(None),
         }
     }
 }

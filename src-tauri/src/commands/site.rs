@@ -16,6 +16,32 @@ use crate::state::AppState;
 pub struct SitePublishState {
     pub running: bool,
     pub pending: bool,
+    /// Why the last publish failed, until one succeeds. A spark's window is
+    /// gone long before its publish finishes, so the failure has to wait
+    /// somewhere it will be seen: the menu bar, and the next door opened.
+    pub last_failure: Option<String>,
+}
+
+pub const MENU_PUBLISH: &str = "Publish the site";
+pub const MENU_PUBLISH_AGAIN: &str = "Publish the site again (the last one failed)";
+
+/// Remember how the last publish ended, and let the menu bar say so.
+fn record_outcome(app: &AppHandle, failure: Option<String>) {
+    let state = app.state::<AppState>();
+    let failed = failure.is_some();
+    state
+        .site_publish
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .last_failure = failure;
+    let item = state.publish_item.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(item) = item.as_ref() {
+        let _ = item.set_text(if failed {
+            MENU_PUBLISH_AGAIN
+        } else {
+            MENU_PUBLISH
+        });
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -37,7 +63,7 @@ fn emit(app: &AppHandle, phase: &str, detail: impl Into<String>) {
     );
 }
 
-fn notify(app: &AppHandle, title: &str, body: &str) {
+pub fn notify(app: &AppHandle, title: &str, body: &str) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
@@ -64,9 +90,7 @@ fn shell_path() -> String {
         .map(|h| h.to_string_lossy().to_string())
         .unwrap_or_default();
     let inherited = std::env::var("PATH").unwrap_or_default();
-    format!(
-        "{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{inherited}"
-    )
+    format!("{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{inherited}")
 }
 
 /// Run the publish to completion. Ok(summary) when the site accepted the
@@ -113,49 +137,47 @@ pub fn request_site_publish(app: &AppHandle) -> Result<(), String> {
     let site_dir = site_dir_from_settings()?;
     {
         let state = app.state::<AppState>();
-        let mut publish = state
-            .site_publish
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut publish = state.site_publish.lock().unwrap_or_else(|e| e.into_inner());
         if publish.running {
             publish.pending = true;
-            emit(app, "queued", "Another publish is running; yours goes next.");
+            emit(
+                app,
+                "queued",
+                "Another publish is running; yours goes next.",
+            );
             return Ok(());
         }
         publish.running = true;
     }
 
     let handle = app.clone();
-    std::thread::spawn(move || {
-        loop {
-            emit(&handle, "started", "Publishing to the site…");
-            match run_publish(&site_dir) {
-                Ok(summary) => {
-                    emit(&handle, "done", summary.clone());
-                    notify(&handle, "Live", &summary);
-                }
-                Err(detail) => {
-                    emit(&handle, "failed", detail.clone());
-                    notify(&handle, "The site didn't publish", &detail);
-                }
+    std::thread::spawn(move || loop {
+        emit(&handle, "started", "Publishing to the site…");
+        match run_publish(&site_dir) {
+            Ok(summary) => {
+                record_outcome(&handle, None);
+                emit(&handle, "done", summary.clone());
+                notify(&handle, "Live", &summary);
             }
-            let again = {
-                let state = handle.state::<AppState>();
-                let mut publish = state
-                    .site_publish
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner());
-                if publish.pending {
-                    publish.pending = false;
-                    true
-                } else {
-                    publish.running = false;
-                    false
-                }
-            };
-            if !again {
-                break;
+            Err(detail) => {
+                record_outcome(&handle, Some(detail.clone()));
+                emit(&handle, "failed", detail.clone());
+                notify(&handle, "The site didn't publish", &detail);
             }
+        }
+        let again = {
+            let state = handle.state::<AppState>();
+            let mut publish = state.site_publish.lock().unwrap_or_else(|e| e.into_inner());
+            if publish.pending {
+                publish.pending = false;
+                true
+            } else {
+                publish.running = false;
+                false
+            }
+        };
+        if !again {
+            break;
         }
     });
     Ok(())
@@ -164,6 +186,18 @@ pub fn request_site_publish(app: &AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn publish_site(app: AppHandle) -> Result<(), String> {
     request_site_publish(&app)
+}
+
+/// Why the last publish failed, if it did and none has succeeded since.
+/// Each door asks when it opens.
+#[tauri::command]
+pub fn site_publish_failure(app: AppHandle) -> Option<String> {
+    app.state::<AppState>()
+        .site_publish
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .last_failure
+        .clone()
 }
 
 #[cfg(test)]
@@ -190,20 +224,27 @@ mod tests {
     fn a_successful_publish_reports_the_scripts_own_summary() {
         let dir = fake_site("#!/bin/zsh\necho ''\necho '  ✓ Published. Live in about a minute → https://conversation.quest'\n");
         let summary = run_publish(&dir).unwrap();
-        assert_eq!(summary, "Published. Live in about a minute → https://conversation.quest");
+        assert_eq!(
+            summary,
+            "Published. Live in about a minute → https://conversation.quest"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn nothing_new_is_still_a_success() {
-        let dir = fake_site("#!/bin/zsh\necho '  Nothing new to publish — the site already matches the vault.'\n");
+        let dir = fake_site(
+            "#!/bin/zsh\necho '  Nothing new to publish — the site already matches the vault.'\n",
+        );
         assert!(run_publish(&dir).unwrap().starts_with("Nothing new"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn a_failing_publish_surfaces_its_last_lines() {
-        let dir = fake_site("#!/bin/zsh\necho '  ✗ Sync hit a problem — nothing was published.'\nexit 1\n");
+        let dir = fake_site(
+            "#!/bin/zsh\necho '  ✗ Sync hit a problem — nothing was published.'\nexit 1\n",
+        );
         let err = run_publish(&dir).unwrap_err();
         assert!(err.contains("Sync hit a problem"), "got: {err}");
         let _ = fs::remove_dir_all(dir);

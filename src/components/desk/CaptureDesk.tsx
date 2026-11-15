@@ -62,6 +62,7 @@ export default function CaptureDesk({ kind, onDismiss }: { kind: DeskKind; onDis
   const [conn, setConn] = useState<Conn>(() => (isRiff ? EMPTY_CONNECTIONS : loadLocalConnections(kind)));
   const [pickerOpen, setPickerOpen] = useState<PickerOpen>(null);
   const [site, setSite] = useState<SitePublishEvent | null>(null);
+  const [siteFailure, setSiteFailure] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
   const cursorReady = useRef(false);
   const cursorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -127,11 +128,21 @@ export default function CaptureDesk({ kind, onDismiss }: { kind: DeskKind; onDis
     const timer = setTimeout(() => { void invoke('save_connections', { id: path, connections: conn }).catch(() => {}); }, 300);
     return () => clearTimeout(timer);
   }, [conn, draft.path, isRiff]);
+  // A publish outlives the window that asked for it: a spark's window is gone
+  // in under a second, the site takes a minute. So a failure is kept until a
+  // publish succeeds, and every door that opens asks whether one is waiting.
   useEffect(() => {
-    if (!isRiff) return;
-    const off = listen<SitePublishEvent>('site-publish', e => setSite(e.payload));
-    return () => { void off.then(fn => fn()); };
-  }, [isRiff]);
+    if (kind === 'quickie') return;
+    const ask = () => { void invoke<string | null>('site_publish_failure').then(f => setSiteFailure(f ?? null)).catch(() => {}); };
+    ask();
+    window.addEventListener('focus', ask);
+    const off = listen<SitePublishEvent>('site-publish', e => {
+      if (isRiff) setSite(e.payload);
+      if (e.payload.phase === 'failed') setSiteFailure(e.payload.detail);
+      else if (e.payload.phase === 'done' || e.payload.phase === 'started') setSiteFailure(null);
+    });
+    return () => { window.removeEventListener('focus', ask); void off.then(fn => fn()); };
+  }, [kind, isRiff]);
 
   // ---- focus & the small doors' auto-dismiss after a send ----
   useEffect(() => {
@@ -387,6 +398,7 @@ export default function CaptureDesk({ kind, onDismiss }: { kind: DeskKind; onDis
       </footer>
     </>}
 
+    {siteFailure && !complete && !draft.error && !message && <div className="desk-message is-error" role="alert">The site didn’t publish: {siteFailure}<button className="quiet" onClick={() => { setSiteFailure(null); void invoke('publish_site').catch(notify); }}>Publish again</button></div>}
     {(draft.error || message) && <div className={`desk-message ${draft.error ? 'is-error' : ''}`} role={draft.error ? 'alert' : 'status'}>{draft.error || message}{draft.error && <button className="quiet" onClick={() => void session.flush().catch(() => {})}>Try saving again</button>}</div>}
     {panel === 'settings' && <Sheet label="Settings" onClose={() => setPanel(null)}><Preferences initialTab={settingsTab} onClose={() => setPanel(null)}/></Sheet>}
     {panel === 'drafts' && <Sheet label="Drafts" onClose={() => setPanel(null)}><DraftShelf currentPath={draft.path} onOpen={openDraft} onNew={() => void fresh()} onClose={() => setPanel(null)}/></Sheet>}

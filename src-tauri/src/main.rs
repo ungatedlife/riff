@@ -5,6 +5,7 @@ mod commands;
 mod shortcuts;
 mod state;
 mod tray;
+mod updates;
 mod windows;
 
 use commands::index::NoteIndex;
@@ -22,9 +23,9 @@ use windows::{show_main, show_quickie, show_spark};
 /// How long an exit waits for the room to finish writing its draft. The
 /// save itself takes a few milliseconds; the timeout only matters if the
 /// webview is unresponsive.
-const EXIT_FLUSH_TIMEOUT: Duration = Duration::from_millis(1500);
+pub(crate) const EXIT_FLUSH_TIMEOUT: Duration = Duration::from_millis(1500);
 
-fn wait_for_flush(app: &AppHandle, timeout: Duration) {
+pub(crate) fn wait_for_flush(app: &AppHandle, timeout: Duration) {
     let state = app.state::<AppState>();
     let (lock, cvar) = &*state.flush_signal;
     let mut done = lock.lock().unwrap_or_else(|e| e.into_inner());
@@ -114,6 +115,7 @@ fn main() {
             publish::publish_riff,
             publish::publish_spark,
             site::publish_site,
+            site::site_publish_failure,
             connections::get_connections,
             connections::save_connections,
             connections::remove_connections,
@@ -185,6 +187,9 @@ fn main() {
 
             settings::apply_launch_at_login(app.handle(), settings.launch_at_login);
 
+            // Look for a newer Riff now and then (see updates.rs).
+            updates::start(app.handle());
+
             // Every window hides instead of closing.
             windows::install_close_guards(app.handle());
 
@@ -192,7 +197,9 @@ fn main() {
             // verification: `Riff.app --open=spark|quickie|main` (the
             // isolated test build has no hotkeys to summon them with).
             #[cfg(debug_assertions)]
-            if let Some(door) = std::env::args().find_map(|a| a.strip_prefix("--open=").map(String::from)) {
+            if let Some(door) =
+                std::env::args().find_map(|a| a.strip_prefix("--open=").map(String::from))
+            {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_millis(800));
