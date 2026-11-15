@@ -41,6 +41,8 @@ export interface RiffSettings {
   font_size: number;
   /** Start Riff at login so the hotkeys always have something to summon. */
   launch_at_login: boolean;
+  /** The welcome screen has been seen. False only on a brand-new install. */
+  welcomed?: boolean;
   text_direction: string;
   hide_tray_icon: boolean;
   active_theme: string;
@@ -50,9 +52,9 @@ export interface RiffSettings {
   custom_fonts?: CustomFontEntry[];
   /** Vault folder sparks land in. Empty = `<vault root>/Sparks`. */
   sparks_dir?: string | null;
-  /** The website repo — `Publish.command` lives there. */
+  /** What runs after something ships: a script, or a folder holding `Publish.command`. */
   site_dir?: string | null;
-  /** Run the site's publish after anything ships from Riff. */
+  /** Run that script each time a spark or riff ships. */
   auto_publish_site?: boolean;
 }
 

@@ -138,6 +138,7 @@ fn main() {
             windows::open_draft,
             windows::open_command_palette,
             windows::open_settings,
+            windows::open_room,
             windows::open_quickie,
             windows::open_spark,
             windows::reopen_last_note,
@@ -186,6 +187,13 @@ fn main() {
             }
 
             settings::apply_launch_at_login(app.handle(), settings.launch_at_login);
+
+            // A new install opens on the welcome screen, which lives in the
+            // Settings window. Riff has no Dock icon, so without it a first
+            // launch would show nothing at all.
+            if !settings.welcomed {
+                windows::show_settings(app.handle());
+            }
 
             // Look for a newer Riff now and then (see updates.rs).
             updates::start(app.handle());

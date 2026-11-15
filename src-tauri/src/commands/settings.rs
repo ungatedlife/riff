@@ -72,8 +72,14 @@ pub struct RiffSettings {
     #[serde(default = "default_font_size")]
     pub font_size: u32,
     /// Start Riff at login so the hotkeys always have something to summon.
+    /// A new install asks first, on the welcome screen.
     #[serde(default = "default_true")]
     pub launch_at_login: bool,
+    /// The welcome screen has been seen. A settings file written before it
+    /// existed belongs to someone already set up, so a missing value is true;
+    /// only a brand-new install starts at false.
+    #[serde(default = "default_true")]
+    pub welcomed: bool,
     #[serde(default = "default_text_direction")]
     pub text_direction: String,
     #[serde(default)]
@@ -93,11 +99,12 @@ pub struct RiffSettings {
     /// from `vault_dir` to the `.obsidian` marker.
     #[serde(default)]
     pub sparks_dir: Option<String>,
-    /// The website repo (`Publish.command` lives there). Shipping a spark or
-    /// riff runs it in the background so the piece is live in a minute.
+    /// What to run after something ships: a script (say, one that publishes
+    /// a website), or a folder holding `Publish.command`. Empty = nothing.
+    /// See `site.rs`.
     #[serde(default)]
     pub site_dir: Option<String>,
-    /// Run the site's publish after anything ships from Riff.
+    /// Run that script each time a spark or riff ships.
     #[serde(default = "default_true")]
     pub auto_publish_site: bool,
 }
@@ -112,7 +119,8 @@ impl Default for RiffSettings {
             hide_dock_icon: true,
             system_shortcuts: default_system_shortcuts(),
             font_size: 21,
-            launch_at_login: true,
+            launch_at_login: false,
+            welcomed: false,
             text_direction: "auto".to_string(),
             hide_tray_icon: false,
             active_theme: String::new(),
@@ -127,12 +135,13 @@ impl Default for RiffSettings {
     }
 }
 
+/// The doors' keys for a new install: ⌃⌥⌘ + R/S/Q, three keys anyone can
+/// press. (Riff used to ship with ⇧⌃⌥⌘, which needs a Caps Lock hyper key.)
 pub fn default_system_shortcuts() -> HashMap<String, String> {
     HashMap::from([
-        // Hyper (Cmd+Ctrl+Alt+Shift) + R/S/Q — pairs with a Caps Lock hyper key.
-        ("summon".to_string(), "Cmd+Ctrl+Alt+Shift+R".to_string()),
-        ("spark".to_string(), "Cmd+Ctrl+Alt+Shift+S".to_string()),
-        ("quickie".to_string(), "Cmd+Ctrl+Alt+Shift+Q".to_string()),
+        ("summon".to_string(), "Cmd+Ctrl+Alt+R".to_string()),
+        ("spark".to_string(), "Cmd+Ctrl+Alt+S".to_string()),
+        ("quickie".to_string(), "Cmd+Ctrl+Alt+Q".to_string()),
         ("search".to_string(), "Cmd+Shift+P".to_string()),
         ("last_note".to_string(), "Cmd+Shift+L".to_string()),
         ("zen_mode".to_string(), "Cmd+Period".to_string()),
@@ -148,15 +157,24 @@ pub fn is_global_action(action: &str) -> bool {
     GLOBAL_ACTIONS.contains(&action)
 }
 
+const HYPER: &str = "Cmd+Ctrl+Alt+Shift+";
+
 fn normalize_system_shortcuts(shortcuts: &mut HashMap<String, String>) {
     // Settings is ⌘, inside the app and never a hotkey; older files still
     // carry the entry.
     shortcuts.remove("settings");
+    // Someone whose doors already use the hyper key gets a missing door on
+    // the hyper key too, not on the new-install default.
+    let uses_hyper = GLOBAL_ACTIONS
+        .iter()
+        .any(|a| shortcuts.get(*a).is_some_and(|s| s.starts_with(HYPER)));
     let defaults = default_system_shortcuts();
     for (action, default_shortcut) in &defaults {
-        shortcuts
-            .entry(action.clone())
-            .or_insert_with(|| default_shortcut.clone());
+        let fill = match default_shortcut.strip_prefix("Cmd+Ctrl+Alt+") {
+            Some(key) if uses_hyper && is_global_action(action) => format!("{HYPER}{key}"),
+            _ => default_shortcut.clone(),
+        };
+        shortcuts.entry(action.clone()).or_insert(fill);
     }
 }
 
@@ -532,8 +550,8 @@ mod tests {
     }
 
     #[test]
-    fn launch_at_login_defaults_on() {
-        assert!(RiffSettings::default().launch_at_login);
+    fn a_new_install_does_not_open_at_login_until_asked() {
+        assert!(!RiffSettings::default().launch_at_login);
     }
     #[test]
     fn older_settings_files_gain_the_spark_hotkey_and_site_defaults() {
@@ -542,10 +560,39 @@ mod tests {
         let normalized = normalize_loaded_settings(settings);
         assert_eq!(
             normalized.system_shortcuts.get("spark").map(String::as_str),
-            Some("Cmd+Ctrl+Alt+Shift+S")
+            Some("Cmd+Ctrl+Alt+S")
         );
         assert!(normalized.auto_publish_site);
         assert!(normalized.site_dir.is_none());
+    }
+
+    #[test]
+    fn a_hyper_key_setup_gets_its_missing_door_on_the_hyper_key() {
+        let mut settings = RiffSettings::default();
+        settings
+            .system_shortcuts
+            .insert("summon".to_string(), "Cmd+Ctrl+Alt+Shift+R".to_string());
+        settings.system_shortcuts.remove("spark");
+        let normalized = normalize_loaded_settings(settings);
+        assert_eq!(
+            normalized.system_shortcuts.get("spark").map(String::as_str),
+            Some("Cmd+Ctrl+Alt+Shift+S")
+        );
+        // Only the three doors move to the hyper key.
+        assert_eq!(
+            normalized
+                .system_shortcuts
+                .get("search")
+                .map(String::as_str),
+            Some("Cmd+Shift+P")
+        );
+    }
+
+    #[test]
+    fn a_settings_file_from_before_the_welcome_screen_counts_as_welcomed() {
+        let old: RiffSettings = serde_json::from_str(r#"{"launch_at_login": true}"#).unwrap();
+        assert!(old.welcomed);
+        assert!(!RiffSettings::default().welcomed);
     }
 
     #[test]

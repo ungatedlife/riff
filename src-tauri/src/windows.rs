@@ -286,6 +286,12 @@ pub fn open_spark(app: AppHandle, text: Option<String>) {
     show_spark(&app, text);
 }
 
+/// The welcome screen's last step: straight into the room.
+#[tauri::command]
+pub fn open_room(app: AppHandle) {
+    show_main(&app);
+}
+
 #[tauri::command]
 pub fn open_settings(app: AppHandle) -> Result<bool, String> {
     show_settings(&app);

@@ -10,7 +10,7 @@ if (import.meta.hot) import.meta.hot.data.bus = bus;
 const key = 'riff:browser-preview:v1';
 type PreviewStore = { settings: RiffSettings; notes: NoteInfo[]; quickies: string; sent: NoteInfo[]; quickieDraft?: string; sparkDraft?: string; sparks?: { name: string; text: string }[]; connections?: Record<string, unknown> };
 const defaults: PreviewStore = {
-  settings: { theme_mode: 'dark', active_theme: 'dark', font_size: 21, text_direction: 'auto', hide_dock_icon: true, hide_tray_icon: false, launch_at_login: true, custom_themes: [], system_shortcuts: SYSTEM_SHORTCUT_DEFAULTS },
+  settings: { theme_mode: 'dark', active_theme: 'dark', font_size: 21, text_direction: 'auto', hide_dock_icon: true, hide_tray_icon: false, launch_at_login: false, welcomed: false, custom_themes: [], system_shortcuts: SYSTEM_SHORTCUT_DEFAULTS },
   notes: [], quickies: '', sent: [],
 };
 function read(): PreviewStore {
@@ -109,6 +109,7 @@ export async function invoke<T>(command: string, args: Record<string, unknown> =
     case 'open_settings': await emit('show-settings'); break;
     case 'open_command_palette': await emit('show-drafts'); break;
     case 'hide_window': await emit('preview-dismiss'); break;
+    case 'open_room': break;
     case 'focused_riff_window': result = 'main'; break;
     case 'copy_rich_text_to_clipboard': await navigator.clipboard.writeText(String(args.plainText)); break;
     case 'save_cursor_position': case 'flush_complete': case 'reload_shortcuts': case 'pause_shortcuts': case 'resume_shortcuts': case 'set_dock_icon_visibility': case 'set_tray_icon_visibility': case 'rebuild_index': break;

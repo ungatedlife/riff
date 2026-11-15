@@ -14,10 +14,11 @@ export type SystemAction = (typeof SYSTEM_SHORTCUT_ACTIONS)[number];
 export const SETTINGS_SHORTCUT = "Cmd+Comma";
 
 export const SYSTEM_SHORTCUT_DEFAULTS: Record<SystemAction, string> = {
-  // Hyper (Cmd+Ctrl+Alt+Shift) + R/S/Q — pairs with a Caps Lock hyper key.
-  summon: "Cmd+Ctrl+Alt+Shift+R",
-  spark: "Cmd+Ctrl+Alt+Shift+S",
-  quickie: "Cmd+Ctrl+Alt+Shift+Q",
+  // ⌃⌥⌘ + R/S/Q: three keys anyone can press. (Riff once shipped with
+  // ⇧⌃⌥⌘, which needs a Caps Lock hyper key; setups that use it keep it.)
+  summon: "Cmd+Ctrl+Alt+R",
+  spark: "Cmd+Ctrl+Alt+S",
+  quickie: "Cmd+Ctrl+Alt+Q",
   search: "Cmd+Shift+P",
   last_note: "Cmd+Shift+L",
   zen_mode: "Cmd+Period",
