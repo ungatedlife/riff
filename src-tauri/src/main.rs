@@ -6,6 +6,7 @@ mod shortcuts;
 mod state;
 mod tray;
 mod updates;
+mod veil;
 mod windows;
 
 use commands::index::NoteIndex;
@@ -200,6 +201,7 @@ fn main() {
 
             // Every window hides instead of closing.
             windows::install_close_guards(app.handle());
+            veil::install(app.handle());
 
             // Debug builds can be launched straight into a door for
             // verification: `Riff.app --open=spark|quickie|main` (the
