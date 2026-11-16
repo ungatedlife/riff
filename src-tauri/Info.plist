@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- Riff is a menu bar app. Declaring it here, not only switching the
+         app to "accessory" once it is running, matters: whenever macOS is
+         asked to open the running app again (Spotlight, a double-click, a
+         riff:// link from Trove), it puts the app back to the type its
+         Info.plist declares, and without this key that was a Dock app. -->
+    <key>LSUIElement</key>
+    <true/>
     <!-- The riff:// URL scheme: another app (Trove) opens
          riff://spark?handoff=<id> or riff://riff?handoff=<id> to hand Riff
          a passage to respond to. See src-tauri/src/commands/handoff.rs. -->

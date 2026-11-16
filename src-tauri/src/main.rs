@@ -44,7 +44,8 @@ pub(crate) fn wait_for_flush(app: &AppHandle, timeout: Duration) {
 }
 
 fn main() {
-    tauri::Builder::default()
+    #[allow(unused_mut)] // only macOS needs it mutable
+    let mut app = tauri::Builder::default()
         .manage(AppState::new())
         .manage(NoteIndex::new())
         .plugin(
@@ -171,9 +172,11 @@ fn main() {
                 shortcuts::register_shortcuts_from_settings(app.handle(), &settings);
             }
 
+            // Riff starts as a menu bar app (see below, and LSUIElement in
+            // Info.plist); a Dock icon only if the settings ask for one.
             #[cfg(target_os = "macos")]
-            if settings.hide_dock_icon {
-                settings::apply_dock_icon_visibility(true);
+            if !settings.hide_dock_icon {
+                settings::apply_dock_icon_visibility(false);
             }
 
             tray::setup_tray(app, settings.launch_at_login)?;
@@ -243,47 +246,54 @@ fn main() {
         .unwrap_or_else(|e| {
             eprintln!("Fatal: Tauri application failed to build: {}", e);
             std::process::exit(1);
-        })
-        .run(|app, event| {
-            // Another app (Trove) opened `riff://spark?handoff=…` or
-            // `riff://riff?handoff=…`: a passage to respond to.
-            #[cfg(target_os = "macos")]
-            if let RunEvent::Opened { urls } = &event {
-                for url in urls {
-                    handoff::open_url(app, url);
-                }
-            }
-            // If that URL is what launched Riff, it arrived before the
-            // windows existed. They do now, so its door can open.
-            if let RunEvent::Ready = &event {
-                handoff::show_waiting_door(app);
-            }
-
-            // Quit (menu bar, ⌘Q) waits for the room to write its draft first.
-            if let RunEvent::ExitRequested { api, code, .. } = event {
-                let already_flushing = {
-                    let state = app.state::<AppState>();
-                    let mut flushing = state
-                        .exit_flushing
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner());
-                    let was = *flushing;
-                    *flushing = true;
-                    was
-                };
-                if already_flushing {
-                    return; // our own exit after the flush — let it through
-                }
-
-                api.prevent_exit();
-                let _ = app.emit_to(EventTarget::labeled(windows::MAIN), "flush-drafts", ());
-
-                let handle = app.clone();
-                let code = code.unwrap_or(0);
-                std::thread::spawn(move || {
-                    wait_for_flush(&handle, EXIT_FLUSH_TIMEOUT);
-                    handle.exit(code);
-                });
-            }
         });
+
+    // Tauri makes every app a Dock app the moment it finishes launching,
+    // before `setup` runs. Telling it now keeps Riff out of the Dock from the
+    // first instant, instead of flashing an icon there and taking it away.
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+    app.run(|app, event| {
+        // Another app (Trove) opened `riff://spark?handoff=…` or
+        // `riff://riff?handoff=…`: a passage to respond to.
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Opened { urls } = &event {
+            for url in urls {
+                handoff::open_url(app, url);
+            }
+        }
+        // If that URL is what launched Riff, it arrived before the
+        // windows existed. They do now, so its door can open.
+        if let RunEvent::Ready = &event {
+            handoff::show_waiting_door(app);
+        }
+
+        // Quit (menu bar, ⌘Q) waits for the room to write its draft first.
+        if let RunEvent::ExitRequested { api, code, .. } = event {
+            let already_flushing = {
+                let state = app.state::<AppState>();
+                let mut flushing = state
+                    .exit_flushing
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                let was = *flushing;
+                *flushing = true;
+                was
+            };
+            if already_flushing {
+                return; // our own exit after the flush — let it through
+            }
+
+            api.prevent_exit();
+            let _ = app.emit_to(EventTarget::labeled(windows::MAIN), "flush-drafts", ());
+
+            let handle = app.clone();
+            let code = code.unwrap_or(0);
+            std::thread::spawn(move || {
+                wait_for_flush(&handle, EXIT_FLUSH_TIMEOUT);
+                handle.exit(code);
+            });
+        }
+    });
 }
