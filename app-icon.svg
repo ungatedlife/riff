@@ -1,7 +1,7 @@
 <!-- Riff's app icon: a spark, and the riff that grows out of it. Source for every icon size: `npx tauri icon app-icon.svg`. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
 <defs>
-  <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#2b2825"/><stop offset="1" stop-color="#181614"/></linearGradient>
+  <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#1b1916"/><stop offset="1" stop-color="#0e0d0b"/></linearGradient>
   <radialGradient id="sheen" cx=".5" cy="0" r="1"><stop stop-color="#ffffff" stop-opacity=".06"/><stop offset=".6" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
   <filter id="drop" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="16"/></filter>
   <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>
